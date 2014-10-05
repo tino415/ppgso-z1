@@ -26,13 +26,21 @@ typedef struct {
 
 pixel image[2*TEX_SIZE][TEX_SIZE];
 
-int kernel[3][3] = {
+float kernel[3][3] = {
 	{1,1,1},
 	{1,1,1},
 	{1,1,1}
 };
 
-float dividor = (float)1/(float)9;
+float kernel2[5][5] = {
+	{1,1,1,1,1},
+	{1,1,1,1,1},
+	{1,1,1,1,1},
+	{1,1,1,1,1},
+	{1,1,1,1,1}
+};
+
+float dividor = 1;
 
 GLuint texture;
 
@@ -46,21 +54,19 @@ void load_image() {
 	fclose(f);
 }
 
-void convolution_transform(int x, int y) {
-	int kx, ky;
-	int red = 0;
-	int green = 0;
-	int blue = 0;
-	int division = 0;
+void convolution_transform_3x(int x, int y, float kernel[3][3]) {
+	int kx, ky, red, green, blue, division;
+	red = green = blue = division = 0;
 	int efx = TEX_SIZE+x;
 
 	for(kx = x - 1; kx <= x+1; kx++) {
 		if(kx >= 0 && kx < TEX_SIZE) {
 			for(ky = y - 1; ky <= y+1; ky++) {
 				if(ky >= 0 && ky < TEX_SIZE) {
-					red += image[kx][ky].r;
-					green += image[kx][ky].g;
-					blue += image[kx][ky].b;
+					int kerneln = kernel[(kx-x)+1][(ky-y)+1];
+					red += round(image[kx][ky].r*kerneln);
+					green += round(image[kx][ky].g*kerneln);
+					blue += round(image[kx][ky].b*kerneln);
 					division++;
 				}
 			}
@@ -72,11 +78,35 @@ void convolution_transform(int x, int y) {
 	image[efx][y].b = dividor*blue/division;
 }
 
+void convolution_transform_5x(int x, int y, float kernel[5][5]) {
+	int kx, ky, red, green, blue, division;
+	red = green = blue = division = 0;
+	int efx = TEX_SIZE+x;
+
+	for(kx = x - 2; kx <= x+2; kx++) {
+		if(kx >= 0 && kx < TEX_SIZE) {
+			for(ky = y - 2; ky <= y+2; ky++) {
+				if(ky >= 0 && ky < TEX_SIZE) {
+					int kerneln = kernel[(kx-x)+2][(ky-y)+2];
+					red += round(image[kx][ky].r*kerneln);
+					green += round(image[kx][ky].g*kerneln);
+					blue += round(image[kx][ky].b*kerneln);
+					division++;
+				}
+			}
+		}
+	}
+
+	image[efx][y].r = dividor*red/division;
+	image[efx][y].g = dividor*green/division;
+	image[efx][y].b = dividor*blue/division;
+}
+
 void convolution() {
 	int unsigned x, y;
 	for(x=0; x<TEX_SIZE; x++) {
 		for(y=0; y<TEX_SIZE; y++) {
-			convolution_transform(x, y);
+			convolution_transform_5x(x, y, kernel2);
 		}
 	}
 }
