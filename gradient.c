@@ -17,6 +17,9 @@
 #endif
 
 #define TEX_SIZE 512
+#define C_RED 0
+#define C_GREEN 1
+#define C_BLUE 2
 
 typedef struct {
     GLubyte r;
@@ -40,8 +43,6 @@ float kernel2[5][5] = {
 	{1,1,1,1,1}
 };
 
-float dividor = 1;
-
 GLuint texture;
 
 void load_image() {
@@ -54,9 +55,35 @@ void load_image() {
 	fclose(f);
 }
 
-void convolution_transform_3x(int x, int y, float kernel[3][3]) {
-	int kx, ky, red, green, blue, division;
-	red = green = blue = division = 0;
+void set_color(int x, int y, int red, int green, int blue) {
+	if(red > 255) {
+		image[x][y].r = 255;
+	} else if(red < 0) {
+		image[x][y].r = 0;
+	} else {
+		image[x][y].r = red;
+	}
+
+	if(green > 255) {
+		image[x][y].g = 255;
+	} else if(green < 0) {
+		image[x][y].g = 0;
+	} else {
+		image[x][y].g = green;
+	}
+
+	if(blue > 255) {
+		image[x][y].b = 255;
+	} else if(blue < 0) {
+		image[x][y].b = 0;
+	} else {
+		image[x][y].b = blue;
+	}
+}
+
+void convolution_transform_3x(int x, int y, float kernel[3][3], float dividor) {
+	int kx, ky, red, green, blue;
+	red = green = blue = 0;
 	int efx = TEX_SIZE+x;
 
 	for(kx = x - 1; kx <= x+1; kx++) {
@@ -67,20 +94,17 @@ void convolution_transform_3x(int x, int y, float kernel[3][3]) {
 					red += round(image[kx][ky].r*kerneln);
 					green += round(image[kx][ky].g*kerneln);
 					blue += round(image[kx][ky].b*kerneln);
-					division++;
 				}
 			}
 		}
 	}
 
-	image[efx][y].r = dividor*red/division;
-	image[efx][y].g = dividor*green/division; 
-	image[efx][y].b = dividor*blue/division;
+	set_color(efx, y, red*dividor, green*dividor, blue*dividor);
 }
 
-void convolution_transform_5x(int x, int y, float kernel[5][5]) {
-	int kx, ky, red, green, blue, division;
-	red = green = blue = division = 0;
+void convolution_transform_5x(int x, int y, float kernel[5][5], float dividor) {
+	int kx, ky, red, green, blue;
+	red = green = blue = 0;
 	int efx = TEX_SIZE+x;
 
 	for(kx = x - 2; kx <= x+2; kx++) {
@@ -91,22 +115,26 @@ void convolution_transform_5x(int x, int y, float kernel[5][5]) {
 					red += round(image[kx][ky].r*kerneln);
 					green += round(image[kx][ky].g*kerneln);
 					blue += round(image[kx][ky].b*kerneln);
-					division++;
 				}
 			}
 		}
 	}
 
-	image[efx][y].r = dividor*red/division;
-	image[efx][y].g = dividor*green/division;
-	image[efx][y].b = dividor*blue/division;
+	set_color(efx, y, red*dividor, green*dividor, blue*dividor);
 }
 
-void convolution() {
+void blur() {
 	int unsigned x, y;
+
+	float kernel[3][3] = {
+		{1,1,1},
+		{1,1,1},
+		{1,1,1}
+	};
+
 	for(x=0; x<TEX_SIZE; x++) {
 		for(y=0; y<TEX_SIZE; y++) {
-			convolution_transform_5x(x, y, kernel2);
+			convolution_transform_3x(x, y, kernel, 1.0/9.0);
 		}
 	}
 }
@@ -133,7 +161,7 @@ void init() {
 void display() {
     // Call user image generation
     load_image();
-	convolution();
+	blur();
     // Copy image to texture memory
     glBindTexture(GL_TEXTURE_2D, texture);
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, TEX_SIZE, 2*TEX_SIZE, 0, GL_RGB, GL_UNSIGNED_BYTE, image);
