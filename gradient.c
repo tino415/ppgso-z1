@@ -106,7 +106,7 @@ void display() {
 	convolution();
     // Copy image to texture memory
     glBindTexture(GL_TEXTURE_2D, texture);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, 2*TEX_SIZE, TEX_SIZE, 0, GL_RGB, GL_UNSIGNED_BYTE, image);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, TEX_SIZE, 2*TEX_SIZE, 0, GL_RGB, GL_UNSIGNED_BYTE, image);
     // Clear screen buffer
     glClear(GL_COLOR_BUFFER_BIT);
     // Render a quad
@@ -126,7 +126,7 @@ void display() {
 int main(int argc, char ** argv) {
     // Init GLUT
     glutInit(&argc, argv);
-    glutInitWindowSize(2*TEX_SIZE, TEX_SIZE);
+    glutInitWindowSize(TEX_SIZE, 2*TEX_SIZE);
     glutInitDisplayMode(GLUT_DOUBLE|GLUT_RGB);
     glutCreateWindow("OpenGL Window");
     // Set up OpenGL state
