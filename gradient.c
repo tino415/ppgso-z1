@@ -146,6 +146,18 @@ void blur() {
 	convolution3x(kernel, 1.00/9.00);
 }
 
+void blur5x() {
+	float kernel[5][5] = {
+		{ 1, 1, 1, 1, 1},
+		{ 1, 1, 1, 1, 1},
+		{ 1, 1, 1, 1, 1},
+		{ 1, 1, 1, 1, 1},
+		{ 1, 1, 1, 1, 1}
+	};
+
+	convolution5x(kernel, 1.00/25.0);
+}
+
 void edge_detection1() {
 	float kernel[3][3] = {
 		{1,0,-1},
@@ -189,7 +201,7 @@ void display() {
     // Call user image generation
     load_image();
 	//blur();
-	edge_detection3();
+	blur5x();
     // Copy image to texture memory
     glBindTexture(GL_TEXTURE_2D, texture);
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, TEX_SIZE, 2*TEX_SIZE, 0, GL_RGB, GL_UNSIGNED_BYTE, image);
