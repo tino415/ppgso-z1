@@ -7,6 +7,7 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <math.h>
 
 #ifdef __APPLE__
   #include <GLUT/glut.h>
@@ -21,15 +22,10 @@ typedef struct {
     GLubyte b;
 } pixel;
 
-typedef struct {
-	GLfloat r;
-	GLfloat g;
-	GLfloat b;
-} cpixel;
-
 #define TEX_SIZE 512
 pixel image[TEX_SIZE][TEX_SIZE];
-cpixel conv[TEX_SIZE][TEX_SIZE];
+pixel effect[TEX_SIZE][TEX_SIZE];
+pixel output[2*TEX_SIZE][TEX_SIZE];
 
 int kernel[3][3] = {
 	{1,1,1},
@@ -41,7 +37,7 @@ float dividor = (float)1/(float)9;
 
 GLuint texture;
 
-void LoadImage() {
+void load_image() {
 	FILE *f = fopen("image.rgb", "rb");
 	if(f == NULL) {
 		printf("Error opening image\n");
@@ -51,18 +47,51 @@ void LoadImage() {
 	fclose(f);
 }
 
-void Convolence() {
-	int unsigned x, y, kx, ky;
-	for(x=0; x<TEX_SIZE; x++) {
-		for(y=0; y<TEX_SIZE; y++) {
-			for(kx = x - 1; kx < x + 1; kx++) {
-				for(ky = y - 1; ky < y + 1; ky++) {
-					float red = (image[x][y].r/(float)255);
-					float green = (image[x][y].g/(float)255);
-					float blue = (image[x][y].b/(float)255);
-					
+void convolution_transform(int x, int y) {
+	int kx, ky;
+	int red = 0;
+	int green = 0;
+	int blue = 0;
+	int division = 0;
+
+	for(kx = x - 1; kx <= x+1; kx++) {
+		if(kx >= 0) {
+			for(ky = y - 1; ky <= y+1; ky++) {
+				if(ky >= 0) {
+					red += image[kx][ky].r;
+					green += image[kx][ky].g;
+					blue += image[kx][ky].b;
+					division++;
 				}
 			}
+		}
+	}
+
+	effect[x][y].r = red/division;
+	effect[x][y].g = green/division; 
+	effect[x][y].b = blue/division;
+}
+
+void convolution() {
+	int unsigned x, y;
+	for(x=0; x<TEX_SIZE; x++) {
+		for(y=0; y<TEX_SIZE; y++) {
+			convolution_transform(x, y);
+		}
+	}
+}
+
+void copy_to_output() {
+	int x,y;
+	for(x=0; x<TEX_SIZE; x++) {
+		for(y=0; y<TEX_SIZE;y++) {
+			int x2 = x + TEX_SIZE;
+			output[x][y].r = image[x][y].r;
+			output[x][y].g = image[x][y].g;
+			output[x][y].b = image[x][y].b;
+			output[x2][y].r = effect[x][y].r;
+			output[x2][y].g = effect[x][y].g;
+			output[x2][y].b = effect[x][y].b;
 		}
 	}
 }
@@ -88,11 +117,12 @@ void init() {
 // Generate and display the image.
 void display() {
     // Call user image generation
-    LoadImage();
-	Convolence();
+    load_image();
+	convolution();
+	copy_to_output();
     // Copy image to texture memory
     glBindTexture(GL_TEXTURE_2D, texture);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, TEX_SIZE, TEX_SIZE, 0, GL_RGB, GL_UNSIGNED_BYTE, conv);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, 2*TEX_SIZE, TEX_SIZE, 0, GL_RGB, GL_UNSIGNED_BYTE, output);
     // Clear screen buffer
     glClear(GL_COLOR_BUFFER_BIT);
     // Render a quad
@@ -112,7 +142,7 @@ void display() {
 int main(int argc, char ** argv) {
     // Init GLUT
     glutInit(&argc, argv);
-    glutInitWindowSize(TEX_SIZE, TEX_SIZE);
+    glutInitWindowSize(2*TEX_SIZE, TEX_SIZE);
     glutInitDisplayMode(GLUT_DOUBLE|GLUT_RGB);
     glutCreateWindow("OpenGL Window");
     // Set up OpenGL state
