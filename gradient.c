@@ -29,12 +29,6 @@ typedef struct {
 
 pixel image[2*TEX_SIZE][TEX_SIZE];
 
-float kernel[3][3] = {
-	{1,1,1},
-	{1,1,1},
-	{1,1,1}
-};
-
 float kernel2[5][5] = {
 	{1,1,1,1,1},
 	{1,1,1,1,1},
@@ -123,20 +117,43 @@ void convolution_transform_5x(int x, int y, float kernel[5][5], float dividor) {
 	set_color(efx, y, red*dividor, green*dividor, blue*dividor);
 }
 
-void blur() {
-	int unsigned x, y;
+void convolution3x(float kernel[3][3], float dividor) {
+	int x, y;
+	
+	for(x = 0; x < TEX_SIZE; x++) {
+		for(y = 0; y < TEX_SIZE; y++) {
+			convolution_transform_3x(x,y,kernel, dividor);
+		}
+	}
+}
 
+void convolution5x(float kernel[5][5], float dividor) {
+	int x,y;
+	for(x = 0; x < TEX_SIZE; x++) {
+		for(y = 0; y < TEX_SIZE; y++) {
+			convolution_transform_5x(x,y,kernel,dividor);
+		}
+	}
+}
+
+void blur() {
 	float kernel[3][3] = {
 		{1,1,1},
 		{1,1,1},
 		{1,1,1}
 	};
 
-	for(x=0; x<TEX_SIZE; x++) {
-		for(y=0; y<TEX_SIZE; y++) {
-			convolution_transform_3x(x, y, kernel, 1.0/9.0);
-		}
-	}
+	convolution3x(kernel, 1.00/9.00);
+}
+
+void edge_detection() {
+	float kernel[3][3] = {
+		{1,0,-1},
+		{0,0,0},
+		{-1,0,1}
+	};
+
+	convolution3x(kernel, 1.00);
 }
 
 // Initialize OpenGL state
@@ -161,7 +178,8 @@ void init() {
 void display() {
     // Call user image generation
     load_image();
-	blur();
+	//blur();
+	edge_detection();
     // Copy image to texture memory
     glBindTexture(GL_TEXTURE_2D, texture);
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, TEX_SIZE, 2*TEX_SIZE, 0, GL_RGB, GL_UNSIGNED_BYTE, image);
