@@ -17,9 +17,12 @@
 #endif
 
 #define TEX_SIZE 512
+#define LAYER_1_SIZE 128
 #define C_RED 0
 #define C_GREEN 1
 #define C_BLUE 2
+
+extern int errno;
 
 typedef struct {
     GLubyte r;
@@ -27,18 +30,38 @@ typedef struct {
     GLubyte b;
 } pixel;
 
+typedef struct {
+    GLubyte r;
+    GLubyte g;
+    GLubyte b;
+    GLubyte a;
+} rgba_pix;
+
 pixel image[2*TEX_SIZE][TEX_SIZE];
+
+rgba_pix alpha[LAYER_1_SIZE][LAYER_1_SIZE];
 
 GLuint texture;
 
 void load_image() {
+    int x,y;
 	FILE *f = fopen("image.rgb", "rb");
 	if(f == NULL) {
-		printf("Error opening image\n");
+		printf("Error opening image: %s \n", strerror(errno));
 		exit(1);
 	}
 	fread(image, TEX_SIZE*TEX_SIZE*sizeof(pixel), 1, f);
 	fclose(f);
+
+	FILE *f2 = fopen("alpha.rgba", "rb");
+	if(f2 == NULL) {
+	    printf("Error opening alpha: %s \n", strerror(errno));
+	    exit(1);
+	}
+	fread(alpha, sizeof(alpha), 1, f2);
+
+	fclose(f2);
+	printf("Alpha is %d\n", alpha[112][109].a);
 }
 
 void set_color(int x, int y, int red, int green, int blue) {
@@ -212,14 +235,31 @@ void init() {
     gluOrtho2D(-1,1,-1,1);
     glLoadIdentity();
     glColor3f(1,1,1);
+    load_image();
+}
+
+void blend() {
+    int x,y, x2, y2;
+    for(x=TEX_SIZE; x < TEX_SIZE+LAYER_1_SIZE; x++) {
+        for(y=0; y< LAYER_1_SIZE; y++) {
+            set_color(x, y,
+                ((alpha[x-TEX_SIZE][y].a/255.0)*alpha[x-TEX_SIZE][y].r) + round(image[x][y].r*(1-(alpha[x-TEX_SIZE][y].a/255.0))),
+                ((alpha[x-TEX_SIZE][y].a/255.0)*alpha[x-TEX_SIZE][y].g) + round(image[x][y].g*(1-(alpha[x-TEX_SIZE][y].a/255.0))),
+                ((alpha[x-TEX_SIZE][y].a/255.0)*alpha[x-TEX_SIZE][y].b) + round(image[x][y].b*(1-(alpha[x-TEX_SIZE][y].a/255.0)))
+//                alpha[x-TEX_SIZE][y].r,
+//                alpha[x-TEX_SIZE][y].g,
+//                alpha[x-TEX_SIZE][y].b
+            );
+        }
+    }
 }
 
 // Generate and display the image.
 void display() {
     // Call user image generation
-    load_image();
 
     effect();
+    blend();
 	//blur();
 	//blur5x();
 	//sharpen();
