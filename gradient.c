@@ -29,14 +29,6 @@ typedef struct {
 
 pixel image[2*TEX_SIZE][TEX_SIZE];
 
-float kernel2[5][5] = {
-	{1,1,1,1,1},
-	{1,1,1,1,1},
-	{1,1,1,1,1},
-	{1,1,1,1,1},
-	{1,1,1,1,1}
-};
-
 GLuint texture;
 
 void load_image() {
@@ -188,6 +180,22 @@ void sharpen() {
     convolution3x(kernel, 1.0);
 }
 
+void (*effect)() = blur;
+
+void handle_keyboard(unsigned char ch, int x, int y) {
+    switch(ch) {
+        case 'b':
+            effect = blur;
+            break;
+        case 's':
+            effect = sharpen;
+            break;
+        case 'e':
+            effect = edge_detection1;
+            break;
+    }
+}
+
 // Initialize OpenGL state
 void init() {
 	// Texture setup
@@ -210,9 +218,11 @@ void init() {
 void display() {
     // Call user image generation
     load_image();
+
+    effect();
 	//blur();
 	//blur5x();
-	sharpen();
+	//sharpen();
     // Copy image to texture memory
     glBindTexture(GL_TEXTURE_2D, texture);
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, TEX_SIZE, 2*TEX_SIZE, 0, GL_RGB, GL_UNSIGNED_BYTE, image);
@@ -242,6 +252,7 @@ int main(int argc, char ** argv) {
     init();
     // Run the control loop
     glutDisplayFunc(display);
+    glutKeyboardFunc(handle_keyboard);
     glutMainLoop();
     return EXIT_SUCCESS;
 }
