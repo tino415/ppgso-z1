@@ -119,7 +119,7 @@ void convolution_transform_5x(int x, int y, float kernel[5][5], float dividor) {
 
 void convolution3x(float kernel[3][3], float dividor) {
 	int x, y;
-	
+
 	for(x = 0; x < TEX_SIZE; x++) {
 		for(y = 0; y < TEX_SIZE; y++) {
 			convolution_transform_3x(x,y,kernel, dividor);
@@ -178,6 +178,16 @@ void edge_detection3() {
 	convolution3x(kernel, 1.0);
 }
 
+void sharpen() {
+    float kernel[3][3] = {
+        {0,-1,0},
+        {-1,5,-1},
+        {0,-1,0}
+    };
+
+    convolution3x(kernel, 1.0);
+}
+
 // Initialize OpenGL state
 void init() {
 	// Texture setup
@@ -201,7 +211,8 @@ void display() {
     // Call user image generation
     load_image();
 	//blur();
-	blur5x();
+	//blur5x();
+	sharpen();
     // Copy image to texture memory
     glBindTexture(GL_TEXTURE_2D, texture);
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, TEX_SIZE, 2*TEX_SIZE, 0, GL_RGB, GL_UNSIGNED_BYTE, image);
