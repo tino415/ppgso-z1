@@ -8,6 +8,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
+#include <string.h>
 
 #ifdef __APPLE__
   #include <GLUT/glut.h>
@@ -43,7 +44,45 @@ rgba_pix alpha[LAYER_1_SIZE][LAYER_1_SIZE];
 
 GLuint texture;
 
+char files[][20] = {
+	"image.rgb",
+	"alpha.rgba"
+};
+
+void load_image_rgb(int x, int y, char *path, int size) {
+	pixel *start = &image[x][y];
+
+	FILE *image_file = fopen(path, "rb");
+	if(image_file == NULL) {
+		printf("Error oppening file %s:\n", path);
+		exit(1);
+	}
+
+	fread(start, size*size*sizeof(pixel), 1, image_file);
+}
+
+void load_image_rgba(int x, int y, char *path, int size) {
+	rgba_pix *start = &alpha[x][y];
+
+	FILE *image_file = fopen(path, "rb");
+	if(image_file == NULL) {
+		printf("Error oppening file %s\n", path);
+		exit(1);
+	}
+
+	fread(start, size*size*sizeof(rgba_pix), 1, image_file);
+}
+
+/*
 void load_image() {
+	int i;
+	for(i = 0; i<sizeof(files); i++) {
+		FILE *f = fopen(files[i], "rb");
+		if(f == NULL) {
+			printf("Error openning file %s\n", files[i]);
+			exit(1);
+		}
+	}
     int x,y;
 	FILE *f = fopen("image.rgb", "rb");
 	if(f == NULL) {
@@ -62,7 +101,7 @@ void load_image() {
 
 	fclose(f2);
 	printf("Alpha is %d\n", alpha[112][109].a);
-}
+}*/
 
 void set_color(int x, int y, int red, int green, int blue) {
 	if(red > 255) {
@@ -235,11 +274,12 @@ void init() {
     gluOrtho2D(-1,1,-1,1);
     glLoadIdentity();
     glColor3f(1,1,1);
-    load_image();
+    load_image_rgb(0, 0, "image.rgb", TEX_SIZE);
 }
 
 void blend() {
     int x,y, x2, y2;
+	load_image_rgba(0, 0, "alpha.rgba", LAYER_1_SIZE);
     for(x=TEX_SIZE; x < TEX_SIZE+LAYER_1_SIZE; x++) {
         for(y=0; y< LAYER_1_SIZE; y++) {
             set_color(x, y,
