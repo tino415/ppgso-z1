@@ -18,12 +18,10 @@
 #endif
 
 #define TEX_SIZE 512
-#define LAYER_1_SIZE 128
+#define ALPHA_SIZE 128
 #define C_RED 0
 #define C_GREEN 1
 #define C_BLUE 2
-
-extern int errno;
 
 typedef struct {
     GLubyte r;
@@ -40,99 +38,80 @@ typedef struct {
 
 pixel image[2*TEX_SIZE][TEX_SIZE];
 
-rgba_pix alpha[LAYER_1_SIZE][LAYER_1_SIZE];
+pixel (*source)[TEX_SIZE] = (pixel(*)[TEX_SIZE])&image[0][0];
+
+pixel (*result)[TEX_SIZE] = (pixel(*)[TEX_SIZE])&image[TEX_SIZE][0];
+
+rgba_pix layer1[TEX_SIZE][TEX_SIZE];
+
+rgba_pix layer2[TEX_SIZE][TEX_SIZE];
+
+int alpha_x = 0;
 
 GLuint texture;
 
-char files[][20] = {
-	"image.rgb",
-	"alpha.rgba"
-};
-
-void load_image_rgb(int x, int y, char *path, int size) {
-	pixel *start = &image[x][y];
-
+FILE *open_image_file(char *path) {
 	FILE *image_file = fopen(path, "rb");
 	if(image_file == NULL) {
-		printf("Error oppening file %s:\n", path);
+		printf("Error openning %s\n", path);
 		exit(1);
 	}
-
-	fread(start, size*size*sizeof(pixel), 1, image_file);
+	return image_file;
 }
 
-void load_image_rgba(int x, int y, char *path, int size) {
-	rgba_pix *start = &alpha[x][y];
-
-	FILE *image_file = fopen(path, "rb");
-	if(image_file == NULL) {
-		printf("Error oppening file %s\n", path);
-		exit(1);
-	}
-
-	fread(start, size*size*sizeof(rgba_pix), 1, image_file);
-}
-
-/*
-void load_image() {
-	int i;
-	for(i = 0; i<sizeof(files); i++) {
-		FILE *f = fopen(files[i], "rb");
-		if(f == NULL) {
-			printf("Error openning file %s\n", files[i]);
-			exit(1);
+void load_rgb(pixel target[TEX_SIZE][TEX_SIZE], char *path, int size) {
+	int x, y;
+	FILE *image_file = open_image_file(path);
+	for(x=0; x<size; x++) {
+		for(y=0; y<size; y++) {
+			fread(&target[x][y], sizeof(pixel), 1, image_file);
 		}
 	}
-    int x,y;
-	FILE *f = fopen("image.rgb", "rb");
-	if(f == NULL) {
-		printf("Error opening image: %s \n", strerror(errno));
-		exit(1);
+	fclose(image_file);
+}
+
+void load_rgba(rgba_pix target[TEX_SIZE][TEX_SIZE], char *path, int size) {
+	int x, y;
+	FILE *image_file = open_image_file(path);
+	for(x=0; x<size; x++) {
+		for(y=0; y<size; y++) {
+			fread(&target[x][y], sizeof(rgba_pix), 1, image_file);
+		}
 	}
-	fread(image, TEX_SIZE*TEX_SIZE*sizeof(pixel), 1, f);
-	fclose(f);
+	fclose(image_file);
+}
 
-	FILE *f2 = fopen("alpha.rgba", "rb");
-	if(f2 == NULL) {
-	    printf("Error opening alpha: %s \n", strerror(errno));
-	    exit(1);
-	}
-	fread(alpha, sizeof(alpha), 1, f2);
+int get_between_0_255(int source) {
+	if(source > 255) return 255;
+	else if(source < 0) return 0;
+	else return source;
+}
 
-	fclose(f2);
-	printf("Alpha is %d\n", alpha[112][109].a);
-}*/
+void set_color(pixel target[TEX_SIZE][TEX_SIZE], int x, int y, int red, int green, int blue) {
+	target[x][y].r = get_between_0_255(red);
+	target[x][y].g = get_between_0_255(green);
+	target[x][y].b = get_between_0_255(blue);
+}
 
-void set_color(int x, int y, int red, int green, int blue) {
-	if(red > 255) {
-		image[x][y].r = 255;
-	} else if(red < 0) {
-		image[x][y].r = 0;
-	} else {
-		image[x][y].r = red;
-	}
-
-	if(green > 255) {
-		image[x][y].g = 255;
-	} else if(green < 0) {
-		image[x][y].g = 0;
-	} else {
-		image[x][y].g = green;
-	}
-
-	if(blue > 255) {
-		image[x][y].b = 255;
-	} else if(blue < 0) {
-		image[x][y].b = 0;
-	} else {
-		image[x][y].b = blue;
+void blend_layer_at(pixel image[TEX_SIZE][TEX_SIZE], rgba_pix layer[TEX_SIZE][TEX_SIZE], int start_x, int start_y) {
+	int x,y;
+	for(x=start_x;x < TEX_SIZE; x++) {
+		for(y=start_y; y < TEX_SIZE; y++) {
+			int lx = x - start_x;
+			int ly = y - start_y;
+			float alp = layer[lx][ly].a / 255;
+			set_color(image, x, y,
+				layer[lx][ly].r * alp + image[x][y].r*(1-alp),
+				layer[lx][ly].g * alp + image[x][y].g*(1-alp),
+				layer[lx][ly].b * alp + image[x][y].b*(1-alp)
+			);
+		}
 	}
 }
 
 void convolution_transform_3x(int x, int y, float kernel[3][3], float dividor) {
 	int kx, ky, red, green, blue;
 	red = green = blue = 0;
-	int efx = TEX_SIZE+x;
 
 	for(kx = x - 1; kx <= x+1; kx++) {
 		if(kx >= 0 && kx < TEX_SIZE) {
@@ -145,15 +124,13 @@ void convolution_transform_3x(int x, int y, float kernel[3][3], float dividor) {
 				}
 			}
 		}
-	}
-
-	set_color(efx, y, red*dividor, green*dividor, blue*dividor);
+	} 
+	set_color(result, x, y, red*dividor, green*dividor, blue*dividor);
 }
 
 void convolution_transform_5x(int x, int y, float kernel[5][5], float dividor) {
 	int kx, ky, red, green, blue;
 	red = green = blue = 0;
-	int efx = TEX_SIZE+x;
 
 	for(kx = x - 2; kx <= x+2; kx++) {
 		if(kx >= 0 && kx < TEX_SIZE) {
@@ -168,7 +145,7 @@ void convolution_transform_5x(int x, int y, float kernel[5][5], float dividor) {
 		}
 	}
 
-	set_color(efx, y, red*dividor, green*dividor, blue*dividor);
+	set_color(result, x, y, red*dividor, green*dividor, blue*dividor);
 }
 
 void convolution3x(float kernel[3][3], float dividor) {
@@ -255,6 +232,16 @@ void handle_keyboard(unsigned char ch, int x, int y) {
         case 'e':
             effect = edge_detection1;
             break;
+		case 'a':
+			if(alpha_x < 255) {
+				alpha_x++;
+			}
+			break;
+		case 'd':
+			if(alpha_x > 0) {
+				alpha_x--;
+			}
+			break;
     }
 }
 
@@ -274,24 +261,10 @@ void init() {
     gluOrtho2D(-1,1,-1,1);
     glLoadIdentity();
     glColor3f(1,1,1);
-    load_image_rgb(0, 0, "image.rgb", TEX_SIZE);
-}
+    load_rgb(source, "image.rgb", TEX_SIZE);
+	load_rgba(layer1,"image.rgba", TEX_SIZE);
+	load_rgba(layer2, "pentagram.rgba", TEX_SIZE);
 
-void blend() {
-    int x,y, x2, y2;
-	load_image_rgba(0, 0, "alpha.rgba", LAYER_1_SIZE);
-    for(x=TEX_SIZE; x < TEX_SIZE+LAYER_1_SIZE; x++) {
-        for(y=0; y< LAYER_1_SIZE; y++) {
-            set_color(x, y,
-                ((alpha[x-TEX_SIZE][y].a/255.0)*alpha[x-TEX_SIZE][y].r) + round(image[x][y].r*(1-(alpha[x-TEX_SIZE][y].a/255.0))),
-                ((alpha[x-TEX_SIZE][y].a/255.0)*alpha[x-TEX_SIZE][y].g) + round(image[x][y].g*(1-(alpha[x-TEX_SIZE][y].a/255.0))),
-                ((alpha[x-TEX_SIZE][y].a/255.0)*alpha[x-TEX_SIZE][y].b) + round(image[x][y].b*(1-(alpha[x-TEX_SIZE][y].a/255.0)))
-//                alpha[x-TEX_SIZE][y].r,
-//                alpha[x-TEX_SIZE][y].g,
-//                alpha[x-TEX_SIZE][y].b
-            );
-        }
-    }
 }
 
 // Generate and display the image.
@@ -299,10 +272,8 @@ void display() {
     // Call user image generation
 
     effect();
-    blend();
-	//blur();
-	//blur5x();
-	//sharpen();
+	blend_layer_at(result, layer1, alpha_x, 0);
+	blend_layer_at(result, layer1, 50, 50);
     // Copy image to texture memory
     glBindTexture(GL_TEXTURE_2D, texture);
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, TEX_SIZE, 2*TEX_SIZE, 0, GL_RGB, GL_UNSIGNED_BYTE, image);
