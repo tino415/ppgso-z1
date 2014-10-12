@@ -9,6 +9,7 @@
 #include <stdlib.h>
 #include <math.h>
 #include <string.h>
+#include <time.h>
 
 #ifdef __APPLE__
   #include <GLUT/glut.h>
@@ -22,6 +23,10 @@
 #define C_RED 0
 #define C_GREEN 1
 #define C_BLUE 2
+
+#define DISPLAY_LAYERS_AND_EFFECT 0
+#define DISPLAY_FRACTAL 1
+#define DISPLAY_TO_LESSBIT 2
 
 typedef struct {
     GLubyte r;
@@ -48,7 +53,7 @@ rgba_pix layer2[TEX_SIZE][TEX_SIZE];
 
 int alpha_x = 0;
 
-int fractal = 0;
+int mode = DISPLAY_LAYERS_AND_EFFECT;
 
 GLuint texture;
 
@@ -221,15 +226,26 @@ void sharpen() {
     convolution3x(kernel, 1.0);
 }
 
+void emboss() {
+	float kernel[3][3] = {
+		{-2, -2, 0},
+		{-2, 6, 0},
+		{0, 0, 0}
+	};
+
+	convolution3x(kernel, 1.0);
+}
+
 void (*effect)() = blur;
 
 void print_fractal() {
 
-#define MaxIters 400
-#define LEFT     -2.0
-#define RIGHT    1.0
-#define TOP      1.0
-#define BOTTOM   -1.0
+	#define MaxIters 400
+	#define LEFT     -2.0
+	#define RIGHT    1.0
+	#define TOP      1.0
+	#define BOTTOM   -1.0
+
 	short   x, y, count;
 	long double zr, zi, cr, ci;
 	long double rsquared, isquared;
@@ -261,18 +277,72 @@ void print_fractal() {
 	}
 }
 
+void to_3bit() {
+	int x, y;
+	for(x = 0; x < TEX_SIZE; x++) {
+		for(y = 0; y < TEX_SIZE; y++) {
+			result[x][y].r = (source[x][y].r > 125) ? 255 : 0;
+			result[x][y].g = (source[x][y].g > 125) ? 255 : 0;
+			result[x][y].b = (source[x][y].b > 125) ? 255 : 0;
+		}
+	}
+}
+
+void to_1bit() {
+	int x, y;
+	for(x = 0; x < TEX_SIZE; x++) {
+		for(y = 0; y < TEX_SIZE; y++) {
+			int power = (source[x][y].r + source[x][y].g + source[x][y].b);
+			if(power > 380) {
+				set_color(result, x, y, 255,255,255);
+			} else {
+				set_color(result, x, y, 0, 0, 0);
+			}
+		}
+	}
+}
+
+void simple_random_dithering() {
+	int x, y;
+	srand(time(NULL));
+	for(x = 0; x < TEX_SIZE; x++) {
+		for(y = 0; y < TEX_SIZE; y++) {
+			int power = (source[x][y].r + source[x][y].g + source[x][y].b);
+			if(power > 250 + (rand()%130)) {
+				set_color(result, x, y, 255,255,255);
+			} else {
+				set_color(result, x, y, 0, 0, 0);
+			}
+		}
+	}
+}
+
+void (*reduce)() = to_3bit;
+
 void handle_keyboard(unsigned char ch, int x, int y) {
     switch(ch) {
-        case 'b':
+        case 'q':
             effect = blur;
+			reduce = to_3bit;
             break;
-        case 's':
+        case 'w':
             effect = sharpen;
+			reduce = to_1bit;
             break;
         case 'e':
             effect = edge_detection1;
+			reduce = simple_random_dithering;
             break;
-		case 'a':
+		case 'r':
+			effect = edge_detection3;
+			break;
+		case 't':
+			effect = blur5x;
+			break;
+		case 'z':
+			effect = emboss;
+			break;
+		case 'u':
 			if(alpha_x < 255) {
 				alpha_x++;
 			}
@@ -282,8 +352,12 @@ void handle_keyboard(unsigned char ch, int x, int y) {
 				alpha_x--;
 			}
 			break;
-		case 'f':
-			fractal = (fractal) ? 0 : 1;
+		case 'm':
+			if(mode == DISPLAY_TO_LESSBIT) {
+				mode = DISPLAY_LAYERS_AND_EFFECT;
+			} else {
+				mode++;
+			}
 			break;
     }
 }
@@ -313,15 +387,21 @@ void init() {
 // Generate and display the image.
 void display() {
     // Call user image generation
-
-	if(fractal) {
-		print_fractal();
-	} else {
-    	effect();
-		blend_layer_at(result, layer1, alpha_x, 0);
-		blend_layer_at(result, layer1, 50, 50);
-	}
 	
+	switch(mode) {
+		case DISPLAY_LAYERS_AND_EFFECT:
+			effect();
+			blend_layer_at(result, layer1, alpha_x, 0);
+			blend_layer_at(result, layer1, 50, 50);
+			break;
+		case DISPLAY_FRACTAL:
+			print_fractal();
+			break;
+		case DISPLAY_TO_LESSBIT:
+			reduce();
+			break;
+	}
+
     // Copy image to texture memory
     glBindTexture(GL_TEXTURE_2D, texture);
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, TEX_SIZE, 2*TEX_SIZE, 0, GL_RGB, GL_UNSIGNED_BYTE, image);
