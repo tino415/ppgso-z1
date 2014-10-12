@@ -94,10 +94,21 @@ int get_between_0_255(int source) {
 	else return source;
 }
 
+int truncate(int value, int size, int trunc_size) {
+	float scale = (float)size / (float) trunc_size;
+	return round(round(value/scale)*scale);
+}
+
 void set_color(pixel target[TEX_SIZE][TEX_SIZE], int x, int y, int red, int green, int blue) {
 	target[x][y].r = get_between_0_255(red);
 	target[x][y].g = get_between_0_255(green);
 	target[x][y].b = get_between_0_255(blue);
+}
+
+void set_pixel_color(pixel *pix, int red, int green, int blue) {
+	pix->r = get_between_0_255(red);	
+	pix->g = get_between_0_255(green);
+	pix->b = get_between_0_255(blue);
 }
 
 void blend_layer_at(pixel image[TEX_SIZE][TEX_SIZE], rgba_pix layer[TEX_SIZE][TEX_SIZE], int start_x, int start_y) {
@@ -294,30 +305,81 @@ void to_1bit() {
 		for(y = 0; y < TEX_SIZE; y++) {
 			int power = (source[x][y].r + source[x][y].g + source[x][y].b);
 			if(power > 380) {
-				set_color(result, x, y, 255,255,255);
+				set_pixel_color(&result[x][y], 255,255,255);
 			} else {
-				set_color(result, x, y, 0, 0, 0);
+				set_pixel_color(&result[x][y], 0, 0, 0);
 			}
 		}
 	}
 }
 
-void simple_random_dithering() {
+void random_dithering_1bit() {
 	int x, y;
-	srand(time(NULL));
 	for(x = 0; x < TEX_SIZE; x++) {
 		for(y = 0; y < TEX_SIZE; y++) {
 			int power = (source[x][y].r + source[x][y].g + source[x][y].b);
 			if(power > 250 + (rand()%130)) {
-				set_color(result, x, y, 255,255,255);
+				set_pixel_color(&result[x][y], 255,255,255);
 			} else {
-				set_color(result, x, y, 0, 0, 0);
+				set_pixel_color(&result[x][y], 0, 0, 0);
 			}
 		}
 	}
 }
 
-void (*reduce)() = to_3bit;
+void to_8bit() {
+	int x, y;
+	for(x = 0; x < TEX_SIZE; x++) {
+		for(y = 0; y < TEX_SIZE; y++) {
+			result[x][y].r = truncate(source[x][y].r, 255, 8);
+			result[x][y].g = truncate(source[x][y].g, 255, 8);
+			result[x][y].b = truncate(source[x][y].b, 255, 4); 
+		}
+	}
+}
+
+void random_dithering_8bit() {
+	int x, y;
+	for(x = 0; x < TEX_SIZE; x++) {
+		for(y = 0; y < TEX_SIZE; y++) {
+			set_pixel_color(&result[x][y],
+				truncate((source[x][y].r - 20) + rand()%40, 255, 8),
+				truncate((source[x][y].g - 20) + rand()%40, 255, 8),
+				truncate((source[x][y].b - 20) + rand()%40, 255, 4)
+			);
+		}
+	}
+}
+
+//void ordered_dithering_1bit() {
+//	int x, y;
+//	for(x = 0; x < TEX_SIZE; x++) {
+//		for(y = 0; y < TEX_SIZE; y++) {
+//			int power = (source[x][y].r + source[x][y].g + source[y][y].b);
+//			int quantum;
+//			if(power > 380) {
+//				set_pixel_color(&result[x][y], 255, 255, 255);
+//			} else {
+//				set_pixel_color(&result[x][y], 0, 0, 0);
+//			}
+//			
+//			result[x+1][y].r += (quantum*7.0/16.0)/3;
+//			result[x+1][y].g += (quantum*7.0/16.0)/3;
+//			result[x+1][y].b += (quantum*7.0/16.0)/3;
+//			result[x-1][y-1].r += (quantum*3.0/16.0)/3;
+//			result[x-1][y-1].g += (quantum*3.0/16.0)/3;
+//			result[x-1][y-1].b += (quantum*3.0/16.0)/3;
+//			result[x][y-1].r += (quantum*5.0/16.0)/3;
+//			result[x][y-1].g += (quantum*5.0/16.0)/3;
+//			result[x][y-1].b += (quantum*5.0/16.0)/3;
+//			result[x+1][y-1].r += (quantum*1.0/16.0)/3;
+//			result[x+1][y-1].g += (quantum*1.0/16.0)/3;
+//			result[x+1][y-1].b += (quantum*1.0/16.0)/3;
+//		}
+//	}
+//}
+
+void (*reduce)() = to_1bit;
 
 void handle_keyboard(unsigned char ch, int x, int y) {
     switch(ch) {
@@ -331,18 +393,21 @@ void handle_keyboard(unsigned char ch, int x, int y) {
             break;
         case 'e':
             effect = edge_detection1;
-			reduce = simple_random_dithering;
+			reduce = to_8bit;
             break;
 		case 'r':
 			effect = edge_detection3;
+			reduce = random_dithering_1bit;
 			break;
 		case 't':
 			effect = blur5x;
+			reduce = random_dithering_8bit;
 			break;
 		case 'z':
 			effect = emboss;
+			//reduce = ordered_dithering_1bit;
 			break;
-		case 'u':
+		case 'a':
 			if(alpha_x < 255) {
 				alpha_x++;
 			}
