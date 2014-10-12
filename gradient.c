@@ -48,6 +48,8 @@ rgba_pix layer2[TEX_SIZE][TEX_SIZE];
 
 int alpha_x = 0;
 
+int fractal = 0;
+
 GLuint texture;
 
 FILE *open_image_file(char *path) {
@@ -221,6 +223,44 @@ void sharpen() {
 
 void (*effect)() = blur;
 
+void print_fractal() {
+
+#define MaxIters 400
+#define LEFT     -2.0
+#define RIGHT    1.0
+#define TOP      1.0
+#define BOTTOM   -1.0
+	short   x, y, count;
+	long double zr, zi, cr, ci;
+	long double rsquared, isquared;
+
+	for (y = 0; y < TEX_SIZE; y++) {
+		for (x = 0; x < TEX_SIZE; x++) {
+			zr = 0.0;
+			zi = 0.0;
+
+			cr = LEFT + x * (RIGHT - LEFT) / TEX_SIZE;
+			ci = TOP + y * (BOTTOM - TOP) / TEX_SIZE;
+
+			rsquared = zr * zr;
+			isquared = zi * zi;
+
+			for (count = 0; rsquared + isquared <= 4.0 && count < MaxIters; count++) {
+				zi = zr * zi * 2;
+				zi += ci;
+				zr = rsquared - isquared;
+				zr += cr;
+				rsquared = zr * zr;
+				isquared = zi * zi;
+			}
+			if (rsquared + isquared <= 4.0)
+				set_color(result,x,y,50,50,50);
+			else
+				set_color(result,x,y,0,0,0);
+		}
+	}
+}
+
 void handle_keyboard(unsigned char ch, int x, int y) {
     switch(ch) {
         case 'b':
@@ -241,6 +281,9 @@ void handle_keyboard(unsigned char ch, int x, int y) {
 			if(alpha_x > 0) {
 				alpha_x--;
 			}
+			break;
+		case 'f':
+			fractal = (fractal) ? 0 : 1;
 			break;
     }
 }
@@ -271,9 +314,14 @@ void init() {
 void display() {
     // Call user image generation
 
-    effect();
-	blend_layer_at(result, layer1, alpha_x, 0);
-	blend_layer_at(result, layer1, 50, 50);
+	if(fractal) {
+		print_fractal();
+	} else {
+    	effect();
+		blend_layer_at(result, layer1, alpha_x, 0);
+		blend_layer_at(result, layer1, 50, 50);
+	}
+	
     // Copy image to texture memory
     glBindTexture(GL_TEXTURE_2D, texture);
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, TEX_SIZE, 2*TEX_SIZE, 0, GL_RGB, GL_UNSIGNED_BYTE, image);
