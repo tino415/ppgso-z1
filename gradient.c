@@ -353,13 +353,13 @@ void random_dithering_8bit() {
 	}
 }
 
+float threshold[2][2] = {
+	{1*(1/5), 3*(1/5)},
+	{4*(1/5), 2*(1/5)}
+};
+
 void ordered_dithering_1bit() {
 	int x, y;
-
-	float threshold[2][2] = {
-		{1*(1/5), 3*(1/5)},
-		{4*(1/5), 2*(1/5)}
-	};
 
 	for(x = 0; x < TEX_SIZE; x++) {
 		for(y = 0; y < TEX_SIZE; y++) { 
@@ -371,6 +371,22 @@ void ordered_dithering_1bit() {
 			} else {
 				set_pixel_color(&result[x][y], 0, 0, 0);
 			}
+		}
+	}
+}
+
+void ordered_dithering_8bit() {
+	int x, y;
+	float threshld;
+	
+	for(x = 0; x < TEX_SIZE; x++) {
+		for(y = 0; y < TEX_SIZE; y++) {
+			threshld = threshold[x%2][y%2];
+			set_pixel_color(&result[x][y],
+				truncate(source[x][y].r + threshld, 255, 8),
+				truncate(source[x][y].g + threshld, 255, 8),
+				truncate(source[x][y].b + threshld, 255, 4)
+			);
 		}
 	}
 }
@@ -429,6 +445,9 @@ void handle_keyboard(unsigned char ch, int x, int y) {
 		case 'z':
 			effect = emboss;
 			reduce = ordered_dithering_1bit;
+			break;
+		case 'u':
+			reduce = ordered_dithering_8bit;
 			break;
 		case 'a':
 			if(alpha_x < 255) {
