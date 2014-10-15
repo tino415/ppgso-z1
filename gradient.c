@@ -55,6 +55,8 @@ int alpha_x = 0;
 
 int mode = DISPLAY_LAYERS_AND_EFFECT;
 
+int reduced = 0;
+
 GLuint texture;
 
 FILE *open_image_file(char *path) {
@@ -351,6 +353,27 @@ void random_dithering_8bit() {
 	}
 }
 
+void ordered_dithering_1bit() {
+	int x, y;
+
+	float threshold[2][2] = {
+		{1*(1/5), 3*(1/5)},
+		{4*(1/5), 2*(1/5)}
+	};
+
+	for(x = 0; x < TEX_SIZE; x++) {
+		for(y = 0; y < TEX_SIZE; y++) { 
+			int power = (source[x][y].r + source[x][y].g + source[x][y].b);
+			power += threshold[x%2][y%2];
+
+			if(power > 335) {
+				set_pixel_color(&result[x][y], 255, 255, 255);
+			} else {
+				set_pixel_color(&result[x][y], 0, 0, 0);
+			}
+		}
+	}
+}
 //void ordered_dithering_1bit() {
 //	int x, y;
 //	for(x = 0; x < TEX_SIZE; x++) {
@@ -405,7 +428,7 @@ void handle_keyboard(unsigned char ch, int x, int y) {
 			break;
 		case 'z':
 			effect = emboss;
-			//reduce = ordered_dithering_1bit;
+			reduce = ordered_dithering_1bit;
 			break;
 		case 'a':
 			if(alpha_x < 255) {
@@ -425,6 +448,8 @@ void handle_keyboard(unsigned char ch, int x, int y) {
 			}
 			break;
     }
+
+	reduced = 0;
 }
 
 // Initialize OpenGL state
@@ -455,15 +480,20 @@ void display() {
 	
 	switch(mode) {
 		case DISPLAY_LAYERS_AND_EFFECT:
+			reduced = 0;
 			effect();
 			blend_layer_at(result, layer1, alpha_x, 0);
 			blend_layer_at(result, layer1, 50, 50);
 			break;
 		case DISPLAY_FRACTAL:
+			reduced = 0;
 			print_fractal();
 			break;
 		case DISPLAY_TO_LESSBIT:
-			reduce();
+			if(!reduced) {
+				reduce();
+				reduced = 1;
+			}
 			break;
 	}
 
