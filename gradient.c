@@ -34,6 +34,24 @@ typedef struct {
     GLubyte b;
 } pixel;
 
+void pixel_add(pixel *a, pixel *b) {
+	a->r += b->r;
+	a->g += b->g;
+	a->b += b->b;
+}
+
+void pixel_minus(pixel *result, pixel *a, pixel *b) {
+	result->r = a->r - b->r;
+	result->g = a->g - b->g;
+	result->b = a->b - b->b;
+}
+
+void pixel_mul(pixel *result, pixel *a, float multiplicator) {
+	result->r = a->r*multiplicator;
+	result->g = a->g*multiplicator;
+	result->b = a->b*multiplicator;
+}
+
 typedef struct {
     GLubyte r;
     GLubyte g;
@@ -354,8 +372,8 @@ void random_dithering_8bit() {
 }
 
 float threshold[2][2] = {
-	{1*(1/5), 3*(1/5)},
-	{4*(1/5), 2*(1/5)}
+	{1.0/5.0, 3.0/5.0},
+	{4.0/5.0, 2.0/5.0}
 };
 
 void ordered_dithering_1bit() {
@@ -383,40 +401,57 @@ void ordered_dithering_8bit() {
 		for(y = 0; y < TEX_SIZE; y++) {
 			threshld = threshold[x%2][y%2];
 			set_pixel_color(&result[x][y],
-				truncate(source[x][y].r + threshld, 255, 8),
-				truncate(source[x][y].g + threshld, 255, 8),
-				truncate(source[x][y].b + threshld, 255, 4)
+				truncate((float)source[x][y].r + threshld, 255, 8),
+				truncate((float)source[x][y].g + threshld, 255, 8),
+				truncate((float)source[x][y].b + threshld, 255, 4)
 			);
 		}
 	}
 }
-//void ordered_dithering_1bit() {
-//	int x, y;
-//	for(x = 0; x < TEX_SIZE; x++) {
-//		for(y = 0; y < TEX_SIZE; y++) {
-//			int power = (source[x][y].r + source[x][y].g + source[y][y].b);
-//			int quantum;
-//			if(power > 380) {
-//				set_pixel_color(&result[x][y], 255, 255, 255);
-//			} else {
-//				set_pixel_color(&result[x][y], 0, 0, 0);
-//			}
-//			
-//			result[x+1][y].r += (quantum*7.0/16.0)/3;
-//			result[x+1][y].g += (quantum*7.0/16.0)/3;
-//			result[x+1][y].b += (quantum*7.0/16.0)/3;
-//			result[x-1][y-1].r += (quantum*3.0/16.0)/3;
-//			result[x-1][y-1].g += (quantum*3.0/16.0)/3;
-//			result[x-1][y-1].b += (quantum*3.0/16.0)/3;
-//			result[x][y-1].r += (quantum*5.0/16.0)/3;
-//			result[x][y-1].g += (quantum*5.0/16.0)/3;
-//			result[x][y-1].b += (quantum*5.0/16.0)/3;
-//			result[x+1][y-1].r += (quantum*1.0/16.0)/3;
-//			result[x+1][y-1].g += (quantum*1.0/16.0)/3;
-//			result[x+1][y-1].b += (quantum*1.0/16.0)/3;
-//		}
-//	}
-//}
+
+void error_diff_dither_1bit() {
+	int x, y;
+	int power;
+
+	pixel error, lerror;
+
+	static pixel workspace[TEX_SIZE][TEX_SIZE];
+	memcpy(*workspace, source, sizeof(workspace));
+
+	for(x = 0; x < TEX_SIZE; x++) {
+		for(y = 0; y < TEX_SIZE; y++) {
+			power = (workspace[x][y].r + workspace[x][y].g + workspace[x][y].b);
+			
+			if(power > 335) {
+				set_pixel_color(&result[x][y], 255, 255, 255);
+			} else {
+				set_pixel_color(&result[x][y], 0, 0, 0);
+			}
+
+			pixel_minus(&error, &workspace[x][y], &result[x][y]);
+
+			if(x < TEX_SIZE) {
+				pixel_mul(&lerror, &error, (7.0/16.0));
+				pixel_add(&workspace[x+1][y], &lerror);
+			}
+
+			if(x > 0 && y < TEX_SIZE) {
+				pixel_mul(&lerror, &error, (3.0/16.0));
+				pixel_add(&workspace[x-1][y+1], &lerror);
+			}
+
+			if(y < TEX_SIZE) {
+				pixel_mul(&lerror, &error, (5.0/16.0));
+				pixel_add(&workspace[x][y+1], &lerror);
+			}
+
+			if(x < TEX_SIZE && y < TEX_SIZE) {
+				pixel_mul(&lerror, &error, (1.0/16.0));
+				pixel_add(&workspace[x+1][y+1], &lerror);
+			}
+		}
+	}
+}
 
 void (*reduce)() = to_1bit;
 
@@ -448,6 +483,9 @@ void handle_keyboard(unsigned char ch, int x, int y) {
 			break;
 		case 'u':
 			reduce = ordered_dithering_8bit;
+			break;
+		case 'i':
+			reduce = error_diff_dither_1bit;
 			break;
 		case 'a':
 			if(alpha_x < 255) {
