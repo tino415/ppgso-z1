@@ -34,22 +34,28 @@ typedef struct {
     GLubyte b;
 } pixel;
 
-void pixel_add(pixel *a, pixel *b) {
+typedef struct {
+	char r;
+	char g;
+	char b;
+} er_pix;
+
+void pixel_add_error(pixel *a, er_pix *b) {
 	a->r += b->r;
 	a->g += b->g;
 	a->b += b->b;
 }
 
-void pixel_minus(pixel *result, pixel *a, pixel *b) {
+void pixel_minus(er_pix *result, pixel *a, pixel *b) {
 	result->r = a->r - b->r;
 	result->g = a->g - b->g;
 	result->b = a->b - b->b;
 }
 
-void pixel_mul(pixel *result, pixel *a, float multiplicator) {
-	result->r = a->r*multiplicator;
-	result->g = a->g*multiplicator;
-	result->b = a->b*multiplicator;
+void pixel_mul_error(er_pix *result, er_pix *a, float multiplicator) {
+	result->r = round(a->r*multiplicator);
+	result->g = round(a->g*multiplicator);
+	result->b = round(a->b*multiplicator);
 }
 
 typedef struct {
@@ -131,13 +137,17 @@ void set_pixel_color(pixel *pix, int red, int green, int blue) {
 	pix->b = get_between_0_255(blue);
 }
 
-void blend_layer_at(pixel image[TEX_SIZE][TEX_SIZE], rgba_pix layer[TEX_SIZE][TEX_SIZE], int start_x, int start_y) {
+void blend_layer_at(
+	pixel image[TEX_SIZE][TEX_SIZE], 
+	rgba_pix layer[TEX_SIZE][TEX_SIZE], 
+	int start_x, int start_y
+) {
 	int x,y;
 	for(x=start_x;x < TEX_SIZE; x++) {
 		for(y=start_y; y < TEX_SIZE; y++) {
 			int lx = x - start_x;
 			int ly = y - start_y;
-			float alp = layer[lx][ly].a / 255;
+			float alp = (float)(layer[lx][ly].a) / 255.0;
 			set_color(image, x, y,
 				layer[lx][ly].r * alp + image[x][y].r*(1-alp),
 				layer[lx][ly].g * alp + image[x][y].g*(1-alp),
@@ -147,7 +157,40 @@ void blend_layer_at(pixel image[TEX_SIZE][TEX_SIZE], rgba_pix layer[TEX_SIZE][TE
 	}
 }
 
-void convolution_transform_3x(int x, int y, float kernel[3][3], float dividor) {
+void pixel_add(pixel *pixel, int addition) {
+	pixel->r += addition;
+	pixel->g += addition;
+	pixel->b += addition;
+}
+
+void convolution_transform(
+	int source_x, int source_y, 
+	float *kernel, 
+	int kernel_size, 
+	float bias
+) {
+	int x, y/*, red, green, blue*/;
+
+	for(x = 0; x < kernel_size; x++) {
+		for(y = 0; y < kernel_size; y++) {
+		}
+	}
+}
+
+void convolution(float *kernel, int kernel_size, float bias) {
+	int x, y, channel_counter;
+	//int kernel_half_size = floor(kernel_size/2);
+
+	for(x = 0; x < TEX_SIZE; x++) {
+		for(y = 0; y < TEX_SIZE; y++) {
+			for(channel_counter = 0; channel_counter < 3; channel_counter++) {
+				convolution_transform(x, y, kernel, kernel_size, bias);
+			}
+		}
+	}
+}
+
+void convolution_transform_3x(int x, int y, float kernel[3][3], float dividor, float bias) {
 	int kx, ky, red, green, blue;
 	red = green = blue = 0;
 
@@ -156,9 +199,9 @@ void convolution_transform_3x(int x, int y, float kernel[3][3], float dividor) {
 			for(ky = y - 1; ky <= y+1; ky++) {
 				if(ky >= 0 && ky < TEX_SIZE) {
 					int kerneln = kernel[(kx-x)+1][(ky-y)+1];
-					red += round(image[kx][ky].r*kerneln);
-					green += round(image[kx][ky].g*kerneln);
-					blue += round(image[kx][ky].b*kerneln);
+					red += round(image[kx][ky].r*kerneln+bias);
+					green += round(image[kx][ky].g*kerneln+bias);
+					blue += round(image[kx][ky].b*kerneln+bias);
 				}
 			}
 		}
@@ -186,12 +229,12 @@ void convolution_transform_5x(int x, int y, float kernel[5][5], float dividor) {
 	set_color(result, x, y, red*dividor, green*dividor, blue*dividor);
 }
 
-void convolution3x(float kernel[3][3], float dividor) {
+void convolution3x(float kernel[3][3], float dividor, float bias) {
 	int x, y;
 
 	for(x = 0; x < TEX_SIZE; x++) {
 		for(y = 0; y < TEX_SIZE; y++) {
-			convolution_transform_3x(x,y,kernel, dividor);
+			convolution_transform_3x(x,y,kernel, dividor, bias);
 		}
 	}
 }
@@ -212,7 +255,7 @@ void blur() {
 		{1,1,1}
 	};
 
-	convolution3x(kernel, 1.00/9.00);
+	convolution3x(kernel, 1.00/9.00, 0);
 }
 
 void blur5x() {
@@ -234,7 +277,7 @@ void edge_detection1() {
 		{-1,0,1}
 	};
 
-	convolution3x(kernel, 1.00);
+	convolution3x(kernel, 1.00, 0);
 }
 
 void edge_detection3() {
@@ -244,7 +287,7 @@ void edge_detection3() {
 		{-1, -1, -1}
 	};
 
-	convolution3x(kernel, 1.0);
+	convolution3x(kernel, 1.0, 0);
 }
 
 void sharpen() {
@@ -254,17 +297,17 @@ void sharpen() {
         {0,-1,0}
     };
 
-    convolution3x(kernel, 1.0);
+    convolution3x(kernel, 1.0, 0);
 }
 
 void emboss() {
 	float kernel[3][3] = {
-		{-2, -2, 0},
-		{-2, 6, 0},
-		{0, 0, 0}
+		{-1, -1, 0},
+		{-1, 0, 1},
+		{0, 1, 1}
 	};
 
-	convolution3x(kernel, 1.0);
+	convolution3x(kernel, 2.0, 3);
 }
 
 void (*effect)() = blur;
@@ -328,6 +371,42 @@ void to_1bit() {
 				set_pixel_color(&result[x][y], 255,255,255);
 			} else {
 				set_pixel_color(&result[x][y], 0, 0, 0);
+			}
+		}
+	}
+}
+
+void to_grayscale() {
+	int x, y;
+
+	for(x = 0; x < TEX_SIZE; x++) {
+		for(y = 0; y < TEX_SIZE; y++) {
+			int power = (0.3 * source[x][y].r + 0.59 * source[x][y].g + 0.11 * source[x][y].b);
+			result[x][y].r = result[x][y].g = result[x][y].b = power;
+		}
+	}
+}
+
+void to_grayscale_custom(pixel target[TEX_SIZE][TEX_SIZE]) {
+	int x, y;
+
+	for(x = 0; x < TEX_SIZE; x++) {
+		for(y = 0; y < TEX_SIZE; y++) {
+			int power = (0.3 * source[x][y].r + 0.59 * source[x][y].g + 0.11 * source[x][y].b);
+			target[x][y].r = target[x][y].g = target[x][y].b = power;
+		}
+	}
+}
+
+void to_1bit_custom(pixel target[TEX_SIZE][TEX_SIZE]) {
+	int x, y;
+	for(x = 0; x < TEX_SIZE; x++) {
+		for(y = 0; y < TEX_SIZE; y++) {
+			int power = (source[x][y].r + source[x][y].g + source[x][y].b);
+			if(power > 380) {
+				set_pixel_color(&target[x][y], 255,255,255);
+			} else {
+				set_pixel_color(&target[x][y], 0, 0, 0);
 			}
 		}
 	}
@@ -401,22 +480,68 @@ void ordered_dithering_8bit() {
 		for(y = 0; y < TEX_SIZE; y++) {
 			threshld = threshold[x%2][y%2];
 			set_pixel_color(&result[x][y],
-				truncate((float)source[x][y].r + threshld, 255, 8),
-				truncate((float)source[x][y].g + threshld, 255, 8),
-				truncate((float)source[x][y].b + threshld, 255, 4)
+				truncate((float)source[x][y].r + (threshld*20), 255, 8),
+				truncate((float)source[x][y].g + (threshld*20), 255, 8),
+				truncate((float)source[x][y].b + (threshld*20), 255, 4)
 			);
 		}
 	}
+}
+
+void error_diff_dither_1bit2() {
+	int x, y;
+
+	static float workspace[TEX_SIZE][TEX_SIZE];
+	float error;
+
+	for(x = 0; x < TEX_SIZE; x++) {
+		for(y = 0; y < TEX_SIZE; y++) {
+			workspace[x][y] = (
+				0.3 * source[x][y].r +
+				0.59 * source[x][y].g +
+				0.11 * source[x][y].b
+			) / 255.0;
+		}
+	}
+
+	for(x = 0; x < TEX_SIZE; x++) {
+		for(y = 0; y < TEX_SIZE; y++) {
+			if(workspace[x][y] > 0.5) {
+				set_pixel_color(&result[x][y], 255,255,255);
+				error = workspace[x][y] - 1;
+			} else {
+				set_pixel_color(&result[x][y], 0, 0, 0);
+				error = workspace[x][y];
+			}
+
+			if(x<TEX_SIZE) {
+				workspace[x+1][y] += 7.0/16.0*error;
+			}
+
+			if(x>0 && y<TEX_SIZE) {
+				workspace[x-1][y+1] += 3.0/16.0*error;
+			}
+
+			if(y < TEX_SIZE) {
+				workspace[x][y+1] += 5.0/16.0*error;
+			}
+
+			if(x < TEX_SIZE && y < TEX_SIZE) {
+				workspace[x+1][y+1] += 1.0/16.0*error;
+			}
+		}
+	}
+
 }
 
 void error_diff_dither_1bit() {
 	int x, y;
 	int power;
 
-	pixel error, lerror;
+	er_pix error, lerror;
 
 	static pixel workspace[TEX_SIZE][TEX_SIZE];
-	memcpy(*workspace, source, sizeof(workspace));
+	to_grayscale_custom(workspace);
 
 	for(x = 0; x < TEX_SIZE; x++) {
 		for(y = 0; y < TEX_SIZE; y++) {
@@ -431,23 +556,23 @@ void error_diff_dither_1bit() {
 			pixel_minus(&error, &workspace[x][y], &result[x][y]);
 
 			if(x < TEX_SIZE) {
-				pixel_mul(&lerror, &error, (7.0/16.0));
-				pixel_add(&workspace[x+1][y], &lerror);
+				pixel_mul_error(&lerror, &error, (7.0/16.0));
+				pixel_add_error(&workspace[x+1][y], &lerror);
 			}
 
 			if(x > 0 && y < TEX_SIZE) {
-				pixel_mul(&lerror, &error, (3.0/16.0));
-				pixel_add(&workspace[x-1][y+1], &lerror);
+				pixel_mul_error(&lerror, &error, (3.0/16.0));
+				pixel_add_error(&workspace[x-1][y+1], &lerror);
 			}
 
 			if(y < TEX_SIZE) {
-				pixel_mul(&lerror, &error, (5.0/16.0));
-				pixel_add(&workspace[x][y+1], &lerror);
+				pixel_mul_error(&lerror, &error, (5.0/16.0));
+				pixel_add_error(&workspace[x][y+1], &lerror);
 			}
 
 			if(x < TEX_SIZE && y < TEX_SIZE) {
-				pixel_mul(&lerror, &error, (1.0/16.0));
-				pixel_add(&workspace[x+1][y+1], &lerror);
+				pixel_mul_error(&lerror, &error, (1.0/16.0));
+				pixel_add_error(&workspace[x+1][y+1], &lerror);
 			}
 		}
 	}
@@ -482,11 +607,14 @@ void handle_keyboard(unsigned char ch, int x, int y) {
 			reduce = ordered_dithering_1bit;
 			break;
 		case 'u':
+			effect = to_grayscale;
 			reduce = ordered_dithering_8bit;
 			break;
 		case 'i':
-			reduce = error_diff_dither_1bit;
+			reduce = error_diff_dither_1bit2;
 			break;
+		case 'o':
+			to_grayscale(result);
 		case 'a':
 			if(alpha_x < 255) {
 				alpha_x++;
@@ -527,7 +655,7 @@ void init() {
     glColor3f(1,1,1);
     load_rgb(source, "image.rgb", TEX_SIZE);
 	load_rgba(layer1,"image.rgba", TEX_SIZE);
-	load_rgba(layer2, "pentagram.rgba", TEX_SIZE);
+	load_rgba(layer2, "top.rgba", TEX_SIZE);
 
 }
 
@@ -540,7 +668,7 @@ void display() {
 			reduced = 0;
 			effect();
 			blend_layer_at(result, layer1, alpha_x, 0);
-			blend_layer_at(result, layer1, 50, 50);
+			blend_layer_at(result, layer2, 50, 50);
 			break;
 		case DISPLAY_FRACTAL:
 			reduced = 0;
