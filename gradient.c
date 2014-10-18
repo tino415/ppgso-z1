@@ -164,110 +164,65 @@ void pixel_add(pixel *pixel, int addition) {
 }
 
 void convolution_transform(
-	int source_x, int source_y, 
+	int pixel_x, int pixel_y, 
 	float *kernel, 
-	int kernel_size, 
+	int kernel_half_size, 
+	int kernel_size,
 	float bias
 ) {
-	int x, y/*, red, green, blue*/;
+	int x, y, red, green, blue;
+	red = green = blue = 0;
 
-	for(x = 0; x < kernel_size; x++) {
-		for(y = 0; y < kernel_size; y++) {
+	for(x = pixel_x - kernel_half_size; x <= pixel_x + kernel_half_size; x++) {
+		if(x >= 0 && x < TEX_SIZE) {
+			for(y = pixel_y - kernel_half_size; y <= pixel_y + kernel_half_size; y++) {
+				if(y >= 0 && y < TEX_SIZE) {
+					int kernel_p = (x - pixel_x + kernel_half_size) * kernel_size;
+					kernel_p += (y - pixel_y + kernel_half_size);
+
+					red += round(source[x][y].r*kernel[kernel_p])+bias;
+					green += round(source[x][y].g*kernel[kernel_p])+bias;
+					blue += round(source[x][y].b*kernel[kernel_p])+bias;
+
+				}
+			}
 		}
 	}
+
+	set_color(result, pixel_x, pixel_y, red, green, blue);
 }
 
 void convolution(float *kernel, int kernel_size, float bias) {
-	int x, y, channel_counter;
-	//int kernel_half_size = floor(kernel_size/2);
-
-	for(x = 0; x < TEX_SIZE; x++) {
-		for(y = 0; y < TEX_SIZE; y++) {
-			for(channel_counter = 0; channel_counter < 3; channel_counter++) {
-				convolution_transform(x, y, kernel, kernel_size, bias);
-			}
-		}
-	}
-}
-
-void convolution_transform_3x(int x, int y, float kernel[3][3], float dividor, float bias) {
-	int kx, ky, red, green, blue;
-	red = green = blue = 0;
-
-	for(kx = x - 1; kx <= x+1; kx++) {
-		if(kx >= 0 && kx < TEX_SIZE) {
-			for(ky = y - 1; ky <= y+1; ky++) {
-				if(ky >= 0 && ky < TEX_SIZE) {
-					int kerneln = kernel[(kx-x)+1][(ky-y)+1];
-					red += round(image[kx][ky].r*kerneln+bias);
-					green += round(image[kx][ky].g*kerneln+bias);
-					blue += round(image[kx][ky].b*kerneln+bias);
-				}
-			}
-		}
-	} 
-	set_color(result, x, y, red*dividor, green*dividor, blue*dividor);
-}
-
-void convolution_transform_5x(int x, int y, float kernel[5][5], float dividor) {
-	int kx, ky, red, green, blue;
-	red = green = blue = 0;
-
-	for(kx = x - 2; kx <= x+2; kx++) {
-		if(kx >= 0 && kx < TEX_SIZE) {
-			for(ky = y - 2; ky <= y+2; ky++) {
-				if(ky >= 0 && ky < TEX_SIZE) {
-					int kerneln = kernel[(kx-x)+2][(ky-y)+2];
-					red += round(image[kx][ky].r*kerneln);
-					green += round(image[kx][ky].g*kerneln);
-					blue += round(image[kx][ky].b*kerneln);
-				}
-			}
-		}
-	}
-
-	set_color(result, x, y, red*dividor, green*dividor, blue*dividor);
-}
-
-void convolution3x(float kernel[3][3], float dividor, float bias) {
 	int x, y;
+	int kernel_half_size = floor(kernel_size/2);
 
 	for(x = 0; x < TEX_SIZE; x++) {
 		for(y = 0; y < TEX_SIZE; y++) {
-			convolution_transform_3x(x,y,kernel, dividor, bias);
-		}
-	}
-}
-
-void convolution5x(float kernel[5][5], float dividor) {
-	int x,y;
-	for(x = 0; x < TEX_SIZE; x++) {
-		for(y = 0; y < TEX_SIZE; y++) {
-			convolution_transform_5x(x,y,kernel,dividor);
+			convolution_transform(x, y, kernel, kernel_half_size, kernel_size, bias);
 		}
 	}
 }
 
 void blur() {
 	float kernel[3][3] = {
-		{1,1,1},
-		{1,1,1},
-		{1,1,1}
+		{1.0/9.0,1.0/9.0,1.0/9.0},
+		{1.0/9.0,1.0/9.0,1.0/9.0},
+		{1.0/9.0,1.0/9.0,1.0/9.0}
 	};
 
-	convolution3x(kernel, 1.00/9.00, 0);
+	convolution((float*)&kernel, 3, 0);
 }
 
 void blur5x() {
 	float kernel[5][5] = {
-		{ 1, 1, 1, 1, 1},
-		{ 1, 1, 1, 1, 1},
-		{ 1, 1, 1, 1, 1},
-		{ 1, 1, 1, 1, 1},
-		{ 1, 1, 1, 1, 1}
+		{ 1.0/25.0, 1.0/25.0, 1.0/25.0, 1.0/25.0, 1.0/25.0},
+		{ 1.0/25.0, 1.0/25.0, 1.0/25.0, 1.0/25.0, 1.0/25.0},
+		{ 1.0/25.0, 1.0/25.0, 1.0/25.0, 1.0/25.0, 1.0/25.0},
+		{ 1.0/25.0, 1.0/25.0, 1.0/25.0, 1.0/25.0, 1.0/25.0},
+		{ 1.0/25.0, 1.0/25.0, 1.0/25.0, 1.0/25.0, 1.0/25.0}
 	};
 
-	convolution5x(kernel, 1.00/25.0);
+	convolution((float*)&kernel, 5, 0);
 }
 
 void edge_detection1() {
@@ -277,7 +232,7 @@ void edge_detection1() {
 		{-1,0,1}
 	};
 
-	convolution3x(kernel, 1.00, 0);
+	convolution((float*) kernel, 3, 0);
 }
 
 void edge_detection3() {
@@ -287,30 +242,30 @@ void edge_detection3() {
 		{-1, -1, -1}
 	};
 
-	convolution3x(kernel, 1.0, 0);
+	convolution((float*)kernel, 3, 0);
 }
 
 void sharpen() {
-    float kernel[3][3] = {
-        {0,-1,0},
-        {-1,5,-1},
-        {0,-1,0}
-    };
+	float kernel[3][3] = {
+		{0, -1, 0},
+		{-1, 5, -1},
+		{0, -1, 0}
+	};
 
-    convolution3x(kernel, 1.0, 0);
+	convolution((float*) kernel, 3, 0);
 }
 
 void emboss() {
 	float kernel[3][3] = {
-		{-1, -1, 0},
-		{-1, 0, 1},
-		{0, 1, 1}
+		{-1.0/2.0, -1.0/2.0, 0.0},
+		{-1.0/2.0, 0, 1/2.0},
+		{0, 1.0/2.0, 1.0/2.0}
 	};
 
-	convolution3x(kernel, 2.0, 3);
+	convolution((float*) kernel, 3, 2);
 }
 
-void (*effect)() = blur;
+void (*effect)() = sharpen;
 
 void print_fractal() {
 
@@ -372,8 +327,7 @@ void to_1bit() {
 			} else {
 				set_pixel_color(&result[x][y], 0, 0, 0);
 			}
-		}
-	}
+		} }
 }
 
 void to_grayscale() {
@@ -488,7 +442,7 @@ void ordered_dithering_8bit() {
 	}
 }
 
-void error_diff_dither_1bit2() {
+void error_diff_dither_1bit() {
 	int x, y;
 
 	static float workspace[TEX_SIZE][TEX_SIZE];
@@ -534,50 +488,6 @@ void error_diff_dither_1bit2() {
 
 }
 
-void error_diff_dither_1bit() {
-	int x, y;
-	int power;
-
-	er_pix error, lerror;
-
-	static pixel workspace[TEX_SIZE][TEX_SIZE];
-	to_grayscale_custom(workspace);
-
-	for(x = 0; x < TEX_SIZE; x++) {
-		for(y = 0; y < TEX_SIZE; y++) {
-			power = (workspace[x][y].r + workspace[x][y].g + workspace[x][y].b);
-			
-			if(power > 335) {
-				set_pixel_color(&result[x][y], 255, 255, 255);
-			} else {
-				set_pixel_color(&result[x][y], 0, 0, 0);
-			}
-
-			pixel_minus(&error, &workspace[x][y], &result[x][y]);
-
-			if(x < TEX_SIZE) {
-				pixel_mul_error(&lerror, &error, (7.0/16.0));
-				pixel_add_error(&workspace[x+1][y], &lerror);
-			}
-
-			if(x > 0 && y < TEX_SIZE) {
-				pixel_mul_error(&lerror, &error, (3.0/16.0));
-				pixel_add_error(&workspace[x-1][y+1], &lerror);
-			}
-
-			if(y < TEX_SIZE) {
-				pixel_mul_error(&lerror, &error, (5.0/16.0));
-				pixel_add_error(&workspace[x][y+1], &lerror);
-			}
-
-			if(x < TEX_SIZE && y < TEX_SIZE) {
-				pixel_mul_error(&lerror, &error, (1.0/16.0));
-				pixel_add_error(&workspace[x+1][y+1], &lerror);
-			}
-		}
-	}
-}
-
 void (*reduce)() = to_1bit;
 
 void handle_keyboard(unsigned char ch, int x, int y) {
@@ -611,7 +521,7 @@ void handle_keyboard(unsigned char ch, int x, int y) {
 			reduce = ordered_dithering_8bit;
 			break;
 		case 'i':
-			reduce = error_diff_dither_1bit2;
+			reduce = error_diff_dither_1bit;
 			break;
 		case 'o':
 			to_grayscale(result);
