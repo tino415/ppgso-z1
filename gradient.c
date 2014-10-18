@@ -36,30 +36,6 @@ typedef struct {
 } pixel;
 
 typedef struct {
-	char r;
-	char g;
-	char b;
-} er_pix;
-
-void pixel_add_error(pixel *a, er_pix *b) {
-	a->r += b->r;
-	a->g += b->g;
-	a->b += b->b;
-}
-
-void pixel_minus(er_pix *result, pixel *a, pixel *b) {
-	result->r = a->r - b->r;
-	result->g = a->g - b->g;
-	result->b = a->b - b->b;
-}
-
-void pixel_mul_error(er_pix *result, er_pix *a, float multiplicator) {
-	result->r = round(a->r*multiplicator);
-	result->g = round(a->g*multiplicator);
-	result->b = round(a->b*multiplicator);
-}
-
-typedef struct {
     GLubyte r;
     GLubyte g;
     GLubyte b;
@@ -206,9 +182,9 @@ void convolution(float *kernel, int kernel_size, float bias) {
 
 void blur() {
 	float kernel[3][3] = {
-		{1.0/9.0,1.0/9.0,1.0/9.0},
-		{1.0/9.0,1.0/9.0,1.0/9.0},
-		{1.0/9.0,1.0/9.0,1.0/9.0}
+		{ (1.0/9.0), (1.0/9.0), (1.0/9.0) },
+		{ (1.0/9.0), (1.0/9.0), (1.0/9.0) },
+		{ (1.0/9.0), (1.0/9.0), (1.0/9.0) }
 	};
 
 	convolution((float*)&kernel, 3, 0);
@@ -216,11 +192,11 @@ void blur() {
 
 void blur5x() {
 	float kernel[5][5] = {
-		{ 1.0/25.0, 1.0/25.0, 1.0/25.0, 1.0/25.0, 1.0/25.0},
-		{ 1.0/25.0, 1.0/25.0, 1.0/25.0, 1.0/25.0, 1.0/25.0},
-		{ 1.0/25.0, 1.0/25.0, 1.0/25.0, 1.0/25.0, 1.0/25.0},
-		{ 1.0/25.0, 1.0/25.0, 1.0/25.0, 1.0/25.0, 1.0/25.0},
-		{ 1.0/25.0, 1.0/25.0, 1.0/25.0, 1.0/25.0, 1.0/25.0}
+		{ (1.0/25.0), (1.0/25.0), (1.0/25.0), (1.0/25.0), (1.0/25.0) },
+		{ (1.0/25.0), (1.0/25.0), (1.0/25.0), (1.0/25.0), (1.0/25.0) },
+		{ (1.0/25.0), (1.0/25.0), (1.0/25.0), (1.0/25.0), (1.0/25.0) },
+		{ (1.0/25.0), (1.0/25.0), (1.0/25.0), (1.0/25.0), (1.0/25.0) },
+		{ (1.0/25.0), (1.0/25.0), (1.0/25.0), (1.0/25.0), (1.0/25.0) }
 	};
 
 	convolution((float*)&kernel, 5, 0);
@@ -228,9 +204,9 @@ void blur5x() {
 
 void edge_detection1() {
 	float kernel[3][3] = {
-		{1,0,-1},
-		{0,0,0},
-		{-1,0,1}
+		{ 1, 0,-1},
+		{ 0, 0, 0},
+		{-1, 0, 1}
 	};
 
 	convolution((float*) kernel, 3, 0);
@@ -238,9 +214,9 @@ void edge_detection1() {
 
 void edge_detection3() {
 	float kernel[3][3] = {
-		{-1, -1, -1},
-		{-1,  8, -1},
-		{-1, -1, -1}
+		{-1,-1,-1},
+		{-1, 8,-1},
+		{-1,-1,-1}
 	};
 
 	convolution((float*)kernel, 3, 0);
@@ -248,9 +224,9 @@ void edge_detection3() {
 
 void sharpen() {
 	float kernel[3][3] = {
-		{0, -1, 0},
-		{-1, 5, -1},
-		{0, -1, 0}
+		{ 0,-1, 0},
+		{-1, 5,-1},
+		{ 0,-1, 0}
 	};
 
 	convolution((float*) kernel, 3, 0);
@@ -258,9 +234,9 @@ void sharpen() {
 
 void emboss() {
 	float kernel[3][3] = {
-		{-1.0/2.0, -1.0/2.0, 0.0},
-		{-1.0/2.0, 0, 1/2.0},
-		{0, 1.0/2.0, 1.0/2.0}
+		{ (-1.0/2.0), (-1.0/2.0),      0.0  },
+		{ (-1.0/2.0),         0 , (1.0/2.0) },
+		{         0 , ( 1.0/2.0), (1.0/2.0) }
 	};
 
 	convolution((float*) kernel, 3, 2);
@@ -486,11 +462,54 @@ void error_diff_dither_1bit() {
 			}
 		}
 	}
+}
 
+void error_diff_dither_8bit() {
+	int x, y, c;
+	float error;
+
+	static pixel workspace[TEX_SIZE][TEX_SIZE];
+	memcpy(&workspace, source, sizeof(workspace)); 
+
+	int channel_sizes[3] = {8,8,4};
+
+	for(x = 0; x < TEX_SIZE; x++) {
+		for(y = 0; y < TEX_SIZE; y++) {
+			char unsigned *channels = (char unsigned *)&workspace[x][y];
+			char unsigned *res_channels = (char unsigned *)&result[x][y];
+			char unsigned *error_channels;
+			for(c = 0; c < 3; c++) {
+				res_channels[c] = truncate(channels[c], 255, channel_sizes[c]);
+				error = channels[c] - res_channels[c];
+
+				if(x<TEX_SIZE) {
+					error_channels = (char unsigned *)&workspace[x+1][y]; 
+					error_channels[c] += 7.0/16.0*error;
+				}
+				if(x>0 && y<TEX_SIZE) {
+					error_channels = (char unsigned *)&workspace[x-1][y+1]; 
+					error_channels[c] += 3.0/16.0*error;
+				}
+				if(y < TEX_SIZE) {
+					error_channels = (char unsigned *)&workspace[x][y+1]; 
+					error_channels[c] += 5.0/16.0*error;
+				}
+				if(y < TEX_SIZE && y < TEX_SIZE) {
+					error_channels = (char unsigned *)&workspace[x+1][y+1]; 
+					error_channels[c] += 1.0/16.0*error;
+				}
+			}
+		}
+	}
 }
 
 void (*reduce)() = to_1bit;
 
+/*
+ * Handles keyboard input, switch modes by char 'm' and 
+ * controll chars for variations are q,w,e,r,t,z,u,i
+ * in layers you can use a and d to move animation
+ */
 void handle_keyboard(unsigned char ch, int x, int y) {
     switch(ch) {
         case 'q':
@@ -525,6 +544,7 @@ void handle_keyboard(unsigned char ch, int x, int y) {
 			reduce = error_diff_dither_1bit;
 			break;
 		case 'o':
+			reduce = error_diff_dither_8bit;
 			to_grayscale(result);
 		case 'a':
 			if(alpha_x < 255) {
