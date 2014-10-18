@@ -24,9 +24,10 @@
 #define C_GREEN 1
 #define C_BLUE 2
 
-#define DISPLAY_LAYERS_AND_EFFECT 0
-#define DISPLAY_FRACTAL 1
-#define DISPLAY_TO_LESSBIT 2
+#define DISPLAY_EFFECT 0
+#define DISPLAY_LAYERS 1
+#define DISPLAY_FRACTAL 2
+#define DISPLAY_TO_LESSBIT 3
 
 typedef struct {
     GLubyte r;
@@ -77,7 +78,7 @@ rgba_pix layer2[TEX_SIZE][TEX_SIZE];
 
 int alpha_x = 0;
 
-int mode = DISPLAY_LAYERS_AND_EFFECT;
+int mode = DISPLAY_EFFECT;
 
 int reduced = 0;
 
@@ -537,7 +538,7 @@ void handle_keyboard(unsigned char ch, int x, int y) {
 			break;
 		case 'm':
 			if(mode == DISPLAY_TO_LESSBIT) {
-				mode = DISPLAY_LAYERS_AND_EFFECT;
+				mode = DISPLAY_EFFECT;
 			} else {
 				mode++;
 			}
@@ -574,11 +575,15 @@ void display() {
     // Call user image generation
 	
 	switch(mode) {
-		case DISPLAY_LAYERS_AND_EFFECT:
+		case DISPLAY_LAYERS:
 			reduced = 0;
-			effect();
+			memcpy(*result, *source, TEX_SIZE*TEX_SIZE*sizeof(pixel));
 			blend_layer_at(result, layer1, alpha_x, 0);
 			blend_layer_at(result, layer2, 50, 50);
+			break;
+		case DISPLAY_EFFECT:
+			reduced = 0;
+			effect();
 			break;
 		case DISPLAY_FRACTAL:
 			reduced = 0;
