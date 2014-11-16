@@ -19,16 +19,16 @@
 #endif
 
 #define TEX_SIZE 512
-#define ALPHA_SIZE 128
 #define C_RED 0
 #define C_GREEN 1
 #define C_BLUE 2
 
-#define DISPLAY_EFFECT 0
-#define DISPLAY_LAYERS 1
-#define DISPLAY_FRACTAL 2
-#define DISPLAY_TO_LESSBIT 3
 #define BZ_STEP 5
+#define BZ_PTS 3
+#define max(x, y) (((x) > (y)) ? (x) : (y))
+#define min(x, y) (((x) < (y)) ? (x) : (y))
+#define ANGLE 0.01
+
 
 typedef struct {
     GLubyte r;
@@ -37,26 +37,46 @@ typedef struct {
 } pixel;
 
 typedef struct {
-	int x;
-	int y;
-	int w;
+	float x;
+	float y;
+	float w;
 } pt;
 
 typedef struct {
-	int x1;
-	int y1;
-	int x2;
-	int y2;
 	pt pt1;
 	pt pt2;
-	int min_x;
-	int min_y;
-	int max_x;
-	int max_y;
-	int len_x;
-	int len_y;
+} ln;
+
+typedef struct {
+	float min_x;
+	float min_y;
+	float len_x;
+	float len_y;
+	float len;
+	float pomer;
+	short longer_x;
+} ln_desc;
+
+typedef struct {
+	pt pt1;
+	pt pt2;
+	pt pt3;
+} bz;
+
+typedef struct {
+	float step_1;
+	float step_2;
+	float len;
+	ln *ln1;
+	ln *ln;
+	ln_desc ldc1;
+	ln_desc ldc2;
+} bz_desc;
+
+typedef struct {
 	int len;
-} line;
+	bz curves[];
+} obj;
 
 pixel image[TEX_SIZE][TEX_SIZE];
 
@@ -67,21 +87,7 @@ int pen_green = 0;
 int pen_blue = 0;
 int pen_width = 0;
 
-void pen_set_color(int red, int green, int blue) {
-	pen_red = red;
-	pen_green = green;
-	pen_blue = blue;
-}
-
-void pen_set_width(int width) {
-	pen_width = width;
-}
-
-void pen_set(int red, int green, int blue, int width) {
-	pen_set_color(red, green, blue);
-	pen_set_width(width);
-}
-
+//Basic functions
 int get_between(int min, int max, int number) {
 	if(number > max) return max;
 	else if(number < min) return min; 
@@ -97,6 +103,22 @@ void set_color(pixel *pix, int red, int green, int blue) {
 	pix->r = get_between(0, 255, red);	
 	pix->g = get_between(0, 255, green);
 	pix->b = get_between(0, 255, blue);
+}
+
+//pen functions
+void pen_set_color(int red, int green, int blue) {
+	pen_red = red;
+	pen_green = green;
+	pen_blue = blue;
+}
+
+void pen_set_width(int width) {
+	pen_width = width;
+}
+
+void pen_set(int red, int green, int blue, int width) {
+	pen_set_color(red, green, blue);
+	pen_set_width(width);
 }
 
 void bucket_fill(pixel canvas[TEX_SIZE][TEX_SIZE]) {
@@ -122,6 +144,64 @@ void point(pixel canvas[TEX_SIZE][TEX_SIZE], int x, int y) {
 	}
 }
 
+void dw_pt(pt* pt) {
+	point(image, pt->x, pt->y);
+}
+
+ln_desc ln_describe(ln *ln) {
+	ln_desc dc;
+	dc.len_x = abs(ln->pt1.x - ln->pt2.x);
+	dc.len_y = abs(ln->pt1.y - ln->pt2.y);
+	dc.min_x = min(ln->pt1.x, ln->pt2.x);
+	dc.min_y = min(ln->pt1.y, ln->pt2.y);
+	dc.longer_x = (dc.len_x > dc.len_y);
+	dc.len = (dc.len_x > dc.len_y) ? dc.len_x : dc.len_y;
+	dc.pomer = (dc.longer_x) ? (float)dc.len_y/dc.len_x : (float)dc.len_x/dc.len_y;
+	return dc;
+}
+
+ln new_ln(pt pt1, pt pt2) {
+	ln line;
+	line.pt1 = pt1;
+	line.pt2 = pt2;
+	return line;
+}
+
+pt ln_gpt(ln *ln, ln_desc *dc, int num) {
+	pt result;
+	int desc;
+	if(dc->longer_x) {
+		desc = ceil(num*dc->pomer);
+		result.x = (ln->pt1.x == dc->min_x) ? dc->min_x + num : max(ln->pt1.x, ln->pt2.x) - num;
+		result.y = (ln->pt1.y == dc->min_y) ? dc->min_y + desc : max(ln->pt1.y, ln->pt2.y) - desc;
+	} else {
+		desc = ceil(num*dc->pomer);
+		result.x = (ln->pt1.x == dc->min_x) ? dc->min_x + desc : max(ln->pt1.x, ln->pt2.x) - desc;
+		result.y = (ln->pt1.y == dc->min_y) ? dc->min_y + num : max(ln->pt1.y, ln->pt2.y) - num;
+	}
+	return result;
+}
+
+void ln_dw_sub(ln* ln, int start, int end) {
+	int i;
+	ln_desc dc = ln_describe(ln);
+	pt pt;
+	for(i=start; i<dc.len; i++) {
+		pt = ln_gpt(ln, &dc, i);
+		dw_pt(&pt);
+	}
+}
+
+void ln_dw(ln* ln) {
+	int i;
+	ln_desc dc = ln_describe(ln);
+	pt pt;
+	for(i=0; i<dc.len; i++) {
+		pt = ln_gpt(ln, &dc, i);
+		dw_pt(&pt);
+	}
+}
+
 pt new_pt(int x, int y, int w) {
 	pt pt;
 	pt.x = x;
@@ -135,135 +215,50 @@ void set_pt(pt *pt, int x, int y) {
 	pt->y = y;
 }
 
-line new_line(int x1, int y1, int x2, int y2) {
-	line line;
-	line.x1 = x1;
-	line.y1 = y1;
-	line.x2 = x2;
-	line.y2 = y2;
-	line.pt1 = new_pt(x1, y1, 1);
-	line.pt2 = new_pt(x2, y2, 1);
-	line.min_x = (x1<x2) ? x1 : x2;
-	line.min_y = (y1<y2) ? y1 : y2;
-	line.max_x = (x2<x1) ? x1 : x2;
-	line.max_y = (y2<y1) ? y1 : y2;
-	line.len_x = line.max_x - line.min_x;
-	line.len_y = line.max_y - line.min_y;
-	line.len = (line.len_x > line.len_y) ? line.len_x : line.len_y;
-	return line;
+bz new_bz(pt* pt1, pt* pt2, pt* pt3) {
+	bz bz;
+	bz.pt1 = *pt1;
+	bz.pt2 = *pt2;
+	bz.pt3 = *pt3;
+	return bz;
 }
 
-line new_ln(pt *pt1, pt* pt2) {
-	return new_line(pt1->x, pt1->y, pt2->x, pt2->y);
-}
+bz_desc bz_get_desc(bz *bz) {
+	bz_desc desc;
+	desc.ln1 = (ln*)bz;
+	desc.ln = (ln*)&bz->pt2;
+	desc.ldc1 = ln_describe(desc.ln1);
+	desc.ldc2 = ln_describe(desc.ln);
 
-typedef struct {
-	pt pt1;
-	pt pt2;
-	pt pt3;
-	line ln1;
-	line ln2;
-} bzcv;
-
-typedef struct {
-	int step_1;
-	int step_2;
-	int num_of_steps;
-} bzcv_desc;
-
-bzcv new_bzcv(pt* pt1, pt* pt2, pt* pt3) {
-	bzcv bzcv;
-	bzcv.pt1 = *pt1;
-	bzcv.pt2 = *pt2;
-	bzcv.pt3 = *pt3;
-	bzcv.ln1 = new_ln(pt1, pt2);
-	bzcv.ln2 = new_ln(pt2, pt3);
-	return bzcv;
-}
-
-bzcv_desc bzcv_get_desc(bzcv *bzcv) {
-	bzcv_desc desc;
-
-	if(bzcv->ln1.len > bzcv->ln2.len) {
+	if(desc.ldc1.len > desc.ldc2.len) {
 		desc.step_1 = BZ_STEP;
-		desc.num_of_steps = bzcv->ln1.len/BZ_STEP;
-		desc.step_2 = bzcv->ln2.len/desc.num_of_steps;
+		desc.len = desc.ldc1.len/BZ_STEP;
+		desc.step_2 = desc.ldc2.len/desc.len;
 	} else {
 		desc.step_2 = BZ_STEP;
-		desc.num_of_steps = bzcv->ln2.len/BZ_STEP;
-		desc.step_1 = bzcv->ln1.len/desc.num_of_steps;
+		desc.len = desc.ldc2.len/BZ_STEP;
+		desc.step_1 = desc.ldc1.len/desc.len;
 	}
 
 	return desc;
 }
 
-pt ln_get_pt(line *line, int num) {
-	pt point;
-	float pomer;
-	if(line->len_x > line->len_y) {
-		pomer = (float)line->len_y/line->len_x;
-		point.x = (line->min_x == line->x1) ? line->min_x + num : line->max_x - num;
-		point.y = (line->min_y == line->y1) ? line->min_y + ceil(pomer*num) : line->max_y - ceil(pomer*num);
-	} else {
-		pomer = (float)line->len_x/line->len_y;
-		point.x = (line->min_x == line->x1) ? line->min_x + ceil(pomer*num) : line->max_x - ceil(pomer*num);
-		point.y = (line->min_y == line->y1) ? line->min_y + num : line->max_y - num;
-	}
-
-	return point;
-}
-
-pt line_midle_pt(line *line) {
-	int step = line->len/2;
-	return ln_get_pt(line, step);
-}
-
-void draw_line(line *line) {
-	
+void bz_dw(bz *bz) {
+	bz_desc desc = bz_get_desc(bz);
 	int i;
-	pt pt;
-	for(i=0; i<line->len;i++) {
-		pt = ln_get_pt(line, i);
-		point(image, pt.x, pt.y);
-	} 
-}
-
-void draw_pt(pt* pt) {
-	point(image, pt->x, pt->y);
-}
-
-void draw_ln_sub(line *line, int start, int end) {
-	int i;
-	pt pt;
-	for(i=start; i<end; i++) {
-		pt = ln_get_pt(line, i);
-		draw_pt(&pt);
-	}
-}
-
-void draw_bzcv(bzcv *bzcv) {
-	bzcv_desc desc = bzcv_get_desc(bzcv);
-	int i;
-	pt prew = bzcv->ln1.pt1;
+	pt prew = desc.ln1->pt1;
 	pt actual;
 
-	for(i=0; i<=desc.num_of_steps;i++) {
-		pt a = ln_get_pt(&bzcv->ln1, i*desc.step_1);
-		pt b = ln_get_pt(&bzcv->ln2, i*desc.step_2);
-		line line_md = new_ln(&a, &b);
-		pen_set(0, 125, 255, 3);
-		actual = ln_get_pt(&line_md, ((float)i/desc.num_of_steps)*line_md.len);
-		line ln3 = new_ln(&prew, &actual);	
-		draw_line(&ln3);
+	for(i=0; i<=desc.len;i++) {
+		ln line_md;
+		line_md.pt1 = ln_gpt(desc.ln1, &desc.ldc1, i*desc.step_1);
+		line_md.pt2 = ln_gpt(desc.ln, &desc.ldc2, i*desc.step_2);
+		ln_desc dc_md = ln_describe(&line_md);
+		actual = ln_gpt(&line_md, &dc_md, ((float)i/desc.len)*dc_md.len);
+		ln ln3 = new_ln(prew, actual);	
+		ln_dw(&ln3);
 		prew = actual;
 	}
-}
-
-pt pt_tran(pt *pot, float tx, float ty) {
-	pt result;
-	result.x = pot->x + tx;
-	result.y = pot->y + ty;
-	return result;
 }
 
 void m_mul(float matrix_a[3][3], float matrix_b[3][3], float result[3][3]) {
@@ -271,8 +266,7 @@ void m_mul(float matrix_a[3][3], float matrix_b[3][3], float result[3][3]) {
 
 	for(row_a = 0; row_a < 3; row_a++)
 		for(coll_b = 0; coll_b < 3; coll_b++) {
-			int sum = 0;
-
+			float sum = 0;
 			for(element = 0; element < 3; element++)
 				sum += matrix_a[row_a][element] * matrix_b[element][coll_b];
 
@@ -281,195 +275,101 @@ void m_mul(float matrix_a[3][3], float matrix_b[3][3], float result[3][3]) {
 				
 }
 
-bzcv bzcv_tran(bzcv *curve, float tx, float ty) {
-	pt pt1 = pt_tran(&curve->pt1, tx, ty);
-	pt pt2 = pt_tran(&curve->pt2, tx, ty);
-	pt pt3 = pt_tran(&curve->pt3, tx, ty);
-	return new_bzcv(
-		&pt1, &pt2, &pt3
-	);
-}
-
 /*
  * Handles keyboard input, switch modes by char 'm' and 
  * controll chars for variations are q,w,e,r,t,z,u,i
  * in layers you can use a and d to move animation
  */
 void handle_keyboard(unsigned char ch, int x, int y) {
-    switch(ch) {
+}
+
+obj r = {
+	4,
+	{
+		{{50, 300, 1}, {50, 50, 1}, {150, 50, 1}},
+		{{150, 50, 1}, {250, 50, 1}, {250, 300, 1}},
+		{{50, 300, 1}, {250, 300, 1}, {500, 300, 1}},
+		{{250, 300, 1}, {375, 175, 1}, {500, 50, 1}}
+	}
+};
+
+pt mrx_pt(pt *point, float matrix[3][3]) {
+	pt result;
+	result.x = point->x * matrix[0][0] + point->y * matrix[0][1] + point->w * matrix[0][2];
+	result.y = point->x * matrix[1][0] + point->y * matrix[1][1] + point->w * matrix[1][2];
+	result.w = point->x * matrix[2][0] + point->y * matrix[2][1] + point->w * matrix[2][2];
+	return result;
+}
+
+void obj_dw(obj *object) {
+	int len = object->len;
+	while(len-- > 0) {
+		bz_dw(&object->curves[len]);
 	}
 }
 
-void draw_r() {
-	pt r1 = new_pt(50, 50, 1);
-	pt r2 = new_pt(50, 300, 1);
-	pt r3 = new_pt(150, 50, 1);
-	pt r4 = new_pt(250, 50, 1);
-	pt r5 = new_pt(250, 300, 1);
-	pt r6 = new_pt(375, 175, 1);
-	pt r7 = new_pt(500, 50, 1);
-	pt r8 = new_pt(500, 300, 1);
-
-	pen_set(175, 255, 0, 8);
-	draw_pt(&r1);
-	draw_pt(&r2);
-	draw_pt(&r3);
-	draw_pt(&r4);
-	draw_pt(&r5);
-	draw_pt(&r6);
-	draw_pt(&r7);
-	draw_pt(&r8);
-
-	pen_set(255, 0, 175, 3);
-	bzcv bzcv1 = new_bzcv(&r2, &r1, &r3);
-	bzcv bzcv2 = new_bzcv(&r3, &r4, &r5);
-	bzcv bzcv3 = new_bzcv(&r2, &r5, &r8);
-	bzcv bzcv4 = new_bzcv(&r5, &r6, &r7);
-	draw_bzcv(&bzcv1);
-	draw_bzcv(&bzcv2);
-	draw_bzcv(&bzcv3);
-	draw_bzcv(&bzcv4);
-
-	pen_set(175, 255, 0, 8);
-	draw_pt(&r1);
-	draw_pt(&r2);
-	draw_pt(&r3);
-	draw_pt(&r4);
-	draw_pt(&r5);
-	draw_pt(&r6);
-	draw_pt(&r7);
-	draw_pt(&r8);
-
-	pen_set(255, 0, 175, 3);
-	bzcv1 = new_bzcv(&r2, &r1, &r3);
-	bzcv2 = new_bzcv(&r3, &r4, &r5);
-	bzcv3 = new_bzcv(&r2, &r5, &r8);
-	bzcv4 = new_bzcv(&r5, &r6, &r7);
-	draw_bzcv(&bzcv1);
-	draw_bzcv(&bzcv2);
-	draw_bzcv(&bzcv3);
-	draw_bzcv(&bzcv4);
-	pen_set(125, 125, 255, 6);
-	bzcv bzcv_t1 = bzcv_tran(&bzcv3, 10, 10);
-	draw_bzcv(&bzcv_t1);
-
-	pen_set(124, 43, 234, 7);
-	pt pt1 = new_pt(250, 250, 1);
-	pt pt2 = pt_tran(&pt1, 8, 0);
-	draw_pt(&pt1);
-	draw_pt(&pt2);
-}
-
-void test_tran() {
-	pen_set(125, 125, 125, 5);
-	
-	pt pt1 = new_pt(100, 100, 1);
-	pt pt2 = new_pt(255, 255, 1);
-	pt pt3 = new_pt(100, 496, 1);
-	bzcv bz = new_bzcv(&pt1, &pt2, &pt3);
-	pen_set(212, 124, 154, 10);
-	draw_pt(&pt1);
-	draw_pt(&pt2);
-	draw_pt(&pt3);
-	draw_bzcv(&bz);
-
-	pen_set(255, 255, 255, 7);
-	bzcv bz2 = bzcv_tran(&bz, 8, 8);
-	pen_set(0, 0, 255, 10);
-	draw_pt(&bz2.pt1);
-	draw_pt(&bz2.pt2);
-	draw_pt(&bz2.pt3);
-	draw_bzcv(&bz2);
-}
-
-void test_mulm() {
-	float m1[3][3] = {
-		{1, 2, 3},
-		{1, 2, 3},
-		{1, 2, 3}
+void obj_trans(obj *object, int vx, int vy) {
+	int len = object->len;
+	float matrix[3][3] = {
+		{1, 0, vx},
+		{0, 1, vy},
+		{0, 0, 1 }
 	};
-	float m2[3][3] = {
-		{1, 2, 3},
-		{1, 2, 3},
-		{1, 2, 3}
-	};
-	float m3[3][3];
-	m_mul(m1, m2, m3);
 
-	int x, y;
-	for(x = 0; x < 3; x++)
-		for(y = 0; y < 3; y++)
-			printf(" | %f\n", m3[x][y]);
+	while(len-- > 0) {
+		object->curves[len].pt1 = mrx_pt(&object->curves[len].pt1, matrix);
+		object->curves[len].pt2 = mrx_pt(&object->curves[len].pt2, matrix);
+		object->curves[len].pt3 = mrx_pt(&object->curves[len].pt3, matrix);
+	}
 }
 
-void draw() {
-	pen_set(0,0,0,5);
-	bucket_fill(image);
-	//test_tran();
-	//test_mulm();
+void obj_rot(obj *object, float angle) {
+	int len = object->len;
+	float matrix[3][3] = {
+		{cos(angle), -1*sin(angle), 0},
+		{sin(angle),    cos(angle), 0},
+		{0         ,             0, 1}
+	};
 
-	//draw_r();
-//	pt a = new_pt(50, 50);
-//	pt a1 = new_pt(100, 100);
-//	pt a2 = new_pt(150, 150);
-//	pt a3 = new_pt(200, 200);
-//	pt b = new_pt(250, 250);
-//	pt b1 = new_pt(200, 300);
-//	pt b2 = new_pt(150, 350);
-//	pt b3 = new_pt(100, 400);
-//	pt c = new_pt(50, 450);
+	while(len-- > 0) {
+		object->curves[len].pt1 = mrx_pt(&object->curves[len].pt1, matrix);
+		object->curves[len].pt2 = mrx_pt(&object->curves[len].pt2, matrix);
+		object->curves[len].pt3 = mrx_pt(&object->curves[len].pt3, matrix);
+	}
+}
 
+void obj_trot(obj *object, float angle, int vx, int vy) {
+	int len = object->len;
+	float trans1[3][3] = {
+		{1, 0, -1*vx},
+		{0, 1, -1*vy},
+		{0, 0, 1 }
+	};
+	float rot[3][3] = {
+		{cos(angle),-sin(angle), 0},
+		{sin(angle), cos(angle), 0},
+		{0, 0, 1}
+	};
+	float trans2[3][3] = {
+		{1, 0, vx},
+	  	{0, 1, vy},
+		{0, 0, 1 }
+	};
+	float matrix[3][3];
+	m_mul(trans2, rot, matrix);
+	m_mul(matrix, trans1, matrix);
 
-//	pen_set(255, 125, 0, 8);
-//	draw_pt(&a);
-//	draw_pt(&a1);
-//	draw_pt(&a2);
-//	draw_pt(&a3);
-//	draw_pt(&b);
-//	draw_pt(&b1);
-//	draw_pt(&b2);
-//	draw_pt(&b3);
-//	draw_pt(&c);
+	while(len-- > 0) {
+		object->curves[len].pt1 = mrx_pt(&object->curves[len].pt1, matrix);
+		object->curves[len].pt2 = mrx_pt(&object->curves[len].pt2, matrix);
+		object->curves[len].pt3 = mrx_pt(&object->curves[len].pt3, matrix);
+	}
+}
 
-//	pen_set(125, 255, 0, 3);
-//	line ln1 = new_ln(&a, &b);
-//	line ln2 = new_ln(&b, &c);
-//	draw_line(&ln1);
-//	draw_line(&ln2);
-
-//	pen_set(0, 125, 255, 2);
-//	bzcv bzcv1 = new_bzcv(&a, &b, &c);
-//	draw_bzcv(&bzcv1);
-
-//	pt b1 = new_pt(250, 300);
-//	pt b2 = new_pt(250, 350);
-//	pt b3 = new_pt(250, 400);
-//	pt c = new_pt(250, 450);
-//	pt b1 = new_pt(300, 250);
-//	pt b2 = new_pt(350, 250);
-// 	pt b3 = new_pt(400, 250);
-// 	pt c = new_pt(450, 250);
-//
-//	pen_set(255, 125, 0, 8);
-//	draw_pt(&a);
-//	draw_pt(&a1);
-//	draw_pt(&a2);
-//	draw_pt(&a3);
-//	draw_pt(&b);
-//	draw_pt(&b1);
-//	draw_pt(&b2);
-//	draw_pt(&b3);
-//	draw_pt(&c);
-//
-//	pen_set(125, 255, 0, 3);
-//	line ln1 = new_ln(&a, &b);
-//	line ln2 = new_ln(&b, &c);
-//	draw_line(&ln1);
-//	draw_line(&ln2);
-//	
-//	pen_set(0, 125, 255, 2);
-//	bzcv bzcv1 = new_bzcv(&a, &b, &c);
-//	draw_bzcv(&bzcv1);
+void test() {
+	pen_set(155, 255, 175, 10);
+	obj_trot(&r, ANGLE, 250, 250);
+	obj_dw(&r);
 }
 
 // Initialize OpenGL state
@@ -488,12 +388,16 @@ void init() {
     gluOrtho2D(-1,1,-1,1);
     glLoadIdentity();
     glColor3f(1,1,1);
-	draw();
+
 }
 
 // Generate and display the image.
 void display() {
+	pen_set(100,100,100,5);
+	bucket_fill(image);
+
     // Call user image generation
+	test();
 	
     // Copy image to texture memory
     glBindTexture(GL_TEXTURE_2D, texture);
