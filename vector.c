@@ -29,6 +29,7 @@
 #define min(x, y) (((x) < (y)) ? (x) : (y))
 #define ANGLE 0.01
 
+int animation = 0;
 
 typedef struct {
     GLubyte r;
@@ -39,6 +40,7 @@ typedef struct {
 typedef struct {
 	float x;
 	float y;
+	float z;
 	float w;
 } pt;
 
@@ -261,13 +263,13 @@ void bz_dw(bz *bz) {
 	}
 }
 
-void m_mul(float matrix_a[3][3], float matrix_b[3][3], float result[3][3]) {
+void m_mul(float matrix_a[4][4], float matrix_b[4][4], float result[4][4]) {
 	int row_a, coll_b, element;
 
-	for(row_a = 0; row_a < 3; row_a++)
-		for(coll_b = 0; coll_b < 3; coll_b++) {
+	for(row_a = 0; row_a < 4; row_a++)
+		for(coll_b = 0; coll_b < 4; coll_b++) {
 			float sum = 0;
-			for(element = 0; element < 3; element++)
+			for(element = 0; element < 4; element++)
 				sum += matrix_a[row_a][element] * matrix_b[element][coll_b];
 
 			result[row_a][coll_b] = sum;
@@ -275,29 +277,26 @@ void m_mul(float matrix_a[3][3], float matrix_b[3][3], float result[3][3]) {
 				
 }
 
-/*
- * Handles keyboard input, switch modes by char 'm' and 
- * controll chars for variations are q,w,e,r,t,z,u,i
- * in layers you can use a and d to move animation
- */
-void handle_keyboard(unsigned char ch, int x, int y) {
-}
-
 obj r = {
 	4,
 	{
-		{{50, 300, 1}, {50, 50, 1}, {150, 50, 1}},
-		{{150, 50, 1}, {250, 50, 1}, {250, 300, 1}},
-		{{50, 300, 1}, {250, 300, 1}, {500, 300, 1}},
-		{{250, 300, 1}, {375, 175, 1}, {500, 50, 1}}
+		{{50, 300, 512, 1}, {50, 50, 512, 1}, {150, 50, 512, 1}},
+		{{150, 50, 512, 1}, {250, 50, 512, 1}, {250, 300, 512, 1}},
+		{{50, 300, 512, 1}, {250, 300, 512, 1}, {500, 300, 512, 1}},
+		{{250, 300, 512, 1}, {375, 175, 512, 1}, {500, 50, 512, 1}}
 	}
 };
 
-pt mrx_pt(pt *point, float matrix[3][3]) {
+pt mrx_pt(pt *point, float matrix[4][4]) {
 	pt result;
-	result.x = point->x * matrix[0][0] + point->y * matrix[0][1] + point->w * matrix[0][2];
-	result.y = point->x * matrix[1][0] + point->y * matrix[1][1] + point->w * matrix[1][2];
-	result.w = point->x * matrix[2][0] + point->y * matrix[2][1] + point->w * matrix[2][2];
+	result.x = 
+		point->x * matrix[0][0] + point->y * matrix[0][1] + point->z * matrix[0][2] + point->w * matrix[0][3];
+	result.y = 
+		point->x * matrix[1][0] + point->y * matrix[1][1] + point->z * matrix[1][2] + point->w * matrix[1][3];
+	result.z =
+		point->x * matrix[2][0] + point->y * matrix[2][1] + point->z * matrix[2][2] + point->w * matrix[2][3];
+	result.w =
+		point->x * matrix[3][0] + point->y * matrix[3][1] + point->z * matrix[3][2] + point->w * matrix[3][3];
 	return result;
 }
 
@@ -308,12 +307,13 @@ void obj_dw(obj *object) {
 	}
 }
 
-void obj_trans(obj *object, int vx, int vy) {
+void obj_trans(obj *object, int vx, int vy, int vz) {
 	int len = object->len;
-	float matrix[3][3] = {
-		{1, 0, vx},
-		{0, 1, vy},
-		{0, 0, 1 }
+	float matrix[4][4] = {
+		{1, 0, 0, vx},
+		{0, 1, 0, vy},
+		{0, 0, 1, vz},
+		{0, 0, 0, 1 }
 	};
 
 	while(len-- > 0) {
@@ -323,12 +323,13 @@ void obj_trans(obj *object, int vx, int vy) {
 	}
 }
 
-void obj_rot(obj *object, float angle) {
+void obj_rot_z(obj *object, float angle) {
 	int len = object->len;
-	float matrix[3][3] = {
-		{cos(angle), -1*sin(angle), 0},
-		{sin(angle),    cos(angle), 0},
-		{0         ,             0, 1}
+	float matrix[4][4] = {
+		{cos(angle), -1*sin(angle), 0, 0},
+		{sin(angle),    cos(angle), 0, 0},
+		{0         ,             0, 1, 0},
+		{0         ,             0, 0, 1}
 	};
 
 	while(len-- > 0) {
@@ -338,25 +339,88 @@ void obj_rot(obj *object, float angle) {
 	}
 }
 
-void obj_trot(obj *object, float angle, int vx, int vy) {
+void obj_rot_x(obj *object, float angle) {
 	int len = object->len;
-	float trans1[3][3] = {
-		{1, 0, -1*vx},
-		{0, 1, -1*vy},
-		{0, 0, 1 }
+	float matrix[4][4] = {
+		{1,0,0,0},
+		{0,cos(angle), -sin(angle), 0},
+		{0,sin(angle), cos(angle), 0},
+		{0,0,0,1}
 	};
-	float rot[3][3] = {
-		{cos(angle),-sin(angle), 0},
-		{sin(angle), cos(angle), 0},
-		{0, 0, 1}
+
+	while(len-- > 0) {
+		object->curves[len].pt1 = mrx_pt(&object->curves[len].pt1, matrix);
+		object->curves[len].pt2 = mrx_pt(&object->curves[len].pt2, matrix);
+		object->curves[len].pt3 = mrx_pt(&object->curves[len].pt3, matrix);
+	}
+}
+
+void obj_rot_y(obj *object, float angle) {
+	int len = object->len;
+	float matrix[4][4] = {
+		{   cos(angle),   0,  sin(angle), 0},
+		{   0         ,   1,           0, 0},
+		{-1*sin(angle),   0,  cos(angle), 0},
+		{   0         ,   0,           0, 1}
 	};
-	float trans2[3][3] = {
-		{1, 0, vx},
-	  	{0, 1, vy},
-		{0, 0, 1 }
+
+	while(len-- > 0) {
+		object->curves[len].pt1 = mrx_pt(&object->curves[len].pt1, matrix);
+		object->curves[len].pt2 = mrx_pt(&object->curves[len].pt2, matrix);
+		object->curves[len].pt3 = mrx_pt(&object->curves[len].pt3, matrix);
+	}
+}
+
+void bz_divw(bz *bz) {
+	int i;
+	pt *start = (pt*) bz;
+	
+	for(i=0;i<3;i++) {
+		start[i].x = start[i].x / start[i].w;
+		start[i].y = start[i].y / start[i].w;
+		start[i].z = start[i].z / start[i].w;
+	}
+}
+
+void obj_persp(obj *object, float d) {
+	int len = object->len;
+	float matrix[4][4] = {
+		{1, 0, 0, 0 },
+		{0, 1, 0, 0 },
+		{0, 0, 1, 0 },
+		{0, 0, 1/d,0}
 	};
-	float matrix[3][3];
-	m_mul(trans2, rot, matrix);
+
+	while(len-- > 0) {
+		object->curves[len].pt1 = mrx_pt(&object->curves[len].pt1, matrix);
+		object->curves[len].pt2 = mrx_pt(&object->curves[len].pt2, matrix);
+		object->curves[len].pt3 = mrx_pt(&object->curves[len].pt3, matrix);
+		bz_divw(&object->curves[len]);
+	}
+}
+
+void obj_trot_z(obj *object, float angle, int vx, int vy, int vz) {
+	int len = object->len;
+	float trans1[4][4] = {
+		{1, 0, 0, -1*vx},
+		{0, 1, 0, -1*vy},
+		{0, 0, 1, -1*vz}, 
+		{0, 0, 0,     1}
+	};
+	float rot_z[4][4] = {
+		{cos(angle), -1*sin(angle), 0, 0},
+		{sin(angle),    cos(angle), 0, 0},
+		{0         ,             0, 1, 0},
+		{0         ,             0, 0, 1}
+	};
+	float trans2[4][4] = {
+		{1, 0, 0, vx},
+		{0, 1, 0, vy},
+		{0, 0, 1, vz},
+		{0, 0, 0, 1 }
+	};
+	float matrix[4][4];
+	m_mul(trans2, rot_z, matrix);
 	m_mul(matrix, trans1, matrix);
 
 	while(len-- > 0) {
@@ -366,11 +430,153 @@ void obj_trot(obj *object, float angle, int vx, int vy) {
 	}
 }
 
-void test() {
-	pen_set(155, 255, 175, 10);
-	obj_trot(&r, ANGLE, 250, 250);
-	obj_dw(&r);
+void obj_trot_y(obj *object, float angle, int vx, int vy, int vz) {
+	int len = object->len;
+	float trans1[4][4] = {
+		{1, 0, 0, -1*vx},
+		{0, 1, 0, -1*vy},
+		{0, 0, 1, -1*vz}, 
+		{0, 0, 0,     1}
+	};
+	float rot_y[4][4] = {
+		{   cos(angle),   0,  sin(angle), 0},
+		{   0         ,   1,           0, 0},
+		{-1*sin(angle),   0,  cos(angle), 0},
+		{   0         ,   0,           0, 1}
+	};
+	float trans2[4][4] = {
+		{1, 0, 0, vx},
+		{0, 1, 0, vy},
+		{0, 0, 1, vz},
+		{0, 0, 0, 1 }
+	};
+	float matrix[4][4];
+	m_mul(trans2, rot_y, matrix);
+	m_mul(matrix, trans1, matrix);
+
+	while(len-- > 0) {
+		object->curves[len].pt1 = mrx_pt(&object->curves[len].pt1, matrix);
+		object->curves[len].pt2 = mrx_pt(&object->curves[len].pt2, matrix);
+		object->curves[len].pt3 = mrx_pt(&object->curves[len].pt3, matrix);
+	}
 }
+
+void obj_trot_x(obj *object, float angle, int vx, int vy, int vz) {
+	int len = object->len;
+	float trans1[4][4] = {
+		{1, 0, 0, -1*vx},
+		{0, 1, 0, -1*vy},
+		{0, 0, 1, -1*vz}, 
+		{0, 0, 0,     1}
+	};
+	float rot_x[4][4] = {
+		{1,0,0,0},
+		{0,cos(angle), -sin(angle), 0},
+		{0,sin(angle), cos(angle), 0},
+		{0,0,0,1}
+	};
+	float trans2[4][4] = {
+		{1, 0, 0, vx},
+		{0, 1, 0, vy},
+		{0, 0, 1, vz},
+		{0, 0, 0, 1 }
+	};
+	float matrix[4][4];
+	m_mul(trans2, rot_x, matrix);
+	m_mul(matrix, trans1, matrix);
+
+	while(len-- > 0) {
+		object->curves[len].pt1 = mrx_pt(&object->curves[len].pt1, matrix);
+		object->curves[len].pt2 = mrx_pt(&object->curves[len].pt2, matrix);
+		object->curves[len].pt3 = mrx_pt(&object->curves[len].pt3, matrix);
+	}
+}
+
+void obj_trot_xyz(obj *object, float angle, int vx, int vy, int vz) {
+	int len = object->len;
+	float trans1[4][4] = {
+		{1, 0, 0, -1*vx},
+		{0, 1, 0, -1*vy},
+		{0, 0, 1, -1*vz}, 
+		{0, 0, 0,     1}
+	};
+	float rot_z[4][4] = {
+		{cos(angle), -1*sin(angle), 0, 0},
+		{sin(angle),    cos(angle), 0, 0},
+		{0         ,             0, 1, 0},
+		{0         ,             0, 0, 1}
+	};
+	float rot_y[4][4] = {
+		{   cos(angle),   0,  sin(angle), 0},
+		{   0         ,   1,           0, 0},
+		{-1*sin(angle),   0,  cos(angle), 0},
+		{   0         ,   0,           0, 1}
+	};
+	float rot_x[4][4] = {
+		{1,0,0,0},
+		{0,cos(angle), -sin(angle), 0},
+		{0,sin(angle), cos(angle), 0},
+		{0,0,0,1}
+	};
+	float trans2[4][4] = {
+		{1, 0, 0, vx},
+		{0, 1, 0, vy},
+		{0, 0, 1, vz},
+		{0, 0, 0, 1 }
+	};
+	float matrix[4][4];
+	m_mul(trans2, rot_x, matrix);
+	m_mul(matrix, rot_y, matrix);
+	m_mul(matrix, rot_z, matrix);
+	m_mul(matrix, trans1, matrix);
+
+	while(len-- > 0) {
+		object->curves[len].pt1 = mrx_pt(&object->curves[len].pt1, matrix);
+		object->curves[len].pt2 = mrx_pt(&object->curves[len].pt2, matrix);
+		object->curves[len].pt3 = mrx_pt(&object->curves[len].pt3, matrix);
+	}
+}
+
+void animate() {
+	obj_trans(&r, -200, -200, -512);
+	obj_rot_z(&r, 0.2);
+	obj_rot_y(&r, 0.2);
+	obj_trans(&r, 200, 200, 512);
+}
+
+/*
+ * Handles keyboard input, switch modes by char 'm' and 
+ * controll chars for variations are q,w,e,r,t,z,u,i
+ * in layers you can use a and d to move animation
+ */
+void handle_keyboard(unsigned char ch, int x, int y) {
+	switch(ch) {
+		case 'r':
+			obj_trans(&r, 0, 0, 10);
+			obj_persp(&r, 512);
+			break;
+		case 'e':
+			obj_trans(&r, 0, 0, -10);
+			obj_persp(&r, 512);
+			break;
+		case 'y':
+			obj_trot_y(&r, 0.3, 200, 200, 512);
+			break;
+		case 'z':
+			obj_trot_z(&r, 0.3, 200, 200, 512);
+			break;
+		case 'x':
+			obj_trot_x(&r, 0.3, 200, 200, 512);
+			break;
+		case 'a':
+			animation = (animation) ? 0 : 1;
+			break;
+		case 'd':
+			obj_trot_xyz(&r, 0.2,250, 250, 500);
+			break;
+	}
+}
+
 
 // Initialize OpenGL state
 void init() {
@@ -388,16 +594,18 @@ void init() {
     gluOrtho2D(-1,1,-1,1);
     glLoadIdentity();
     glColor3f(1,1,1);
-
+	obj_persp(&r, 512);
 }
 
 // Generate and display the image.
 void display() {
-	pen_set(100,100,100,5);
+	pen_set(255,255,255,5);
 	bucket_fill(image);
 
     // Call user image generation
-	test();
+	if(animation) animate();
+	pen_set(155, 255, 175, 10);
+	obj_dw(&r);
 	
     // Copy image to texture memory
     glBindTexture(GL_TEXTURE_2D, texture);
