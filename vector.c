@@ -287,6 +287,8 @@ obj r = {
 	}
 };
 
+obj *out_r;
+
 pt mrx_pt(pt *point, float matrix[4][4]) {
 	pt result;
 	result.x = 
@@ -305,6 +307,13 @@ void obj_dw(obj *object) {
 	while(len-- > 0) {
 		bz_dw(&object->curves[len]);
 	}
+}
+
+obj* obj_copy(obj *object) {
+	obj *res = malloc(sizeof(obj)+object->len*sizeof(bz));
+	res->len = object->len;
+	memcpy(res->curves, object->curves, object->len * sizeof(bz)); 
+	return res;
 }
 
 void obj_trans(obj *object, int vx, int vy, int vz) {
@@ -542,6 +551,8 @@ void animate() {
 	obj_rot_z(&r, 0.2);
 	obj_rot_y(&r, 0.2);
 	obj_trans(&r, 200, 200, 512);
+	free(out_r);
+	out_r = obj_copy(&r);
 }
 
 /*
@@ -553,26 +564,42 @@ void handle_keyboard(unsigned char ch, int x, int y) {
 	switch(ch) {
 		case 'r':
 			obj_trans(&r, 0, 0, 10);
-			obj_persp(&r, 512);
+			free(out_r);
+			out_r = obj_copy(&r);
+			obj_persp(out_r, 512);
 			break;
 		case 'e':
 			obj_trans(&r, 0, 0, -10);
-			obj_persp(&r, 512);
+			free(out_r);
+			out_r = obj_copy(&r);
+			obj_persp(out_r, 512);
 			break;
 		case 'y':
 			obj_trot_y(&r, 0.3, 200, 200, 512);
+			free(out_r);
+			out_r = obj_copy(&r);
+			obj_persp(out_r, 512);
 			break;
 		case 'z':
 			obj_trot_z(&r, 0.3, 200, 200, 512);
+			free(out_r);
+			out_r = obj_copy(&r);
+			obj_persp(out_r, 512);
 			break;
 		case 'x':
 			obj_trot_x(&r, 0.3, 200, 200, 512);
+			free(out_r);
+			out_r = obj_copy(&r);
+			obj_persp(out_r, 512);
 			break;
 		case 'a':
 			animation = (animation) ? 0 : 1;
 			break;
 		case 'd':
 			obj_trot_xyz(&r, 0.2,250, 250, 500);
+			free(out_r);
+			out_r = obj_copy(&r);
+			obj_persp(out_r, 512);
 			break;
 	}
 }
@@ -594,7 +621,8 @@ void init() {
     gluOrtho2D(-1,1,-1,1);
     glLoadIdentity();
     glColor3f(1,1,1);
-	obj_persp(&r, 512);
+	out_r = obj_copy(&r);
+	obj_persp(out_r, 512);
 }
 
 // Generate and display the image.
@@ -605,7 +633,7 @@ void display() {
     // Call user image generation
 	if(animation) animate();
 	pen_set(155, 255, 175, 10);
-	obj_dw(&r);
+	obj_dw(out_r);
 	
     // Copy image to texture memory
     glBindTexture(GL_TEXTURE_2D, texture);
