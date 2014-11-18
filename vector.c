@@ -23,7 +23,7 @@
 #define C_GREEN 1
 #define C_BLUE 2
 
-#define BZ_STEP 5
+#define BZ_STEP 5 //Presnosť kreslenia bezierovej krivky
 #define BZ_PTS 3
 #define max(x, y) (((x) > (y)) ? (x) : (y))
 #define min(x, y) (((x) < (y)) ? (x) : (y))
@@ -37,6 +37,16 @@ typedef struct {
     GLubyte b;
 } pixel;
 
+/*
+ * Vymazane funkcie
+ * - new_pt
+ * - pt_set
+ * - ln_dw_sub
+ */
+
+/*
+ * Reprezentuje jeden bod v 3d
+ */
 typedef struct {
 	float x;
 	float y;
@@ -44,40 +54,47 @@ typedef struct {
 	float w;
 } pt;
 
+//Ciara
 typedef struct {
 	pt pt1;
 	pt pt2;
 } ln;
 
+//Popis ciary, aby som si nemusel niektore veci
+//pocitat furt od znova
 typedef struct {
 	float min_x;
 	float min_y;
-	float len_x;
+	float len_x; //len - dlzka cize (max_x - min_x)
 	float len_y;
-	float len;
-	float pomer;
-	short longer_x;
+	float len; //Dlzka max(len_x, len_y)
+	float pomer; //min(len_x, len_y)/max(len_x, len_y)
+	short longer_x; //ci je len_x viac ako len_y
 } ln_desc;
 
+//Bezierova krivka 
+//je definovana troma bodmy
 typedef struct {
 	pt pt1;
 	pt pt2;
 	pt pt3;
 } bz;
 
+//Popis
 typedef struct {
-	float step_1;
-	float step_2;
-	float len;
-	ln *ln1;
-	ln *ln;
-	ln_desc ldc1;
-	ln_desc ldc2;
+	float step_1; //dlzka kroku na prvej ciare
+	float step_2; //dlzka kroku na druhej ciare
+	float len; //dlzka, koľko krokov podla BZ_STEP je potrebnych na nakreselenie bz
+	ln *ln1; //ciara z pt1 do pt2
+	ln *ln; //ciara z pt2 do pt3
+	ln_desc ldc1; //popis ciary z pt1 do pt2
+	ln_desc ldc2; //popis ciary z pt2 do pt3
 } bz_desc;
 
+//Objekt, je v nom ulozeny uz kompletny tvar npr. pismeno R
 typedef struct {
-	int len;
-	bz curves[];
+	int len; //Pocet bezierovych kriviek
+	bz curves[]; //Krivky
 } obj;
 
 pixel image[TEX_SIZE][TEX_SIZE];
@@ -90,6 +107,7 @@ int pen_blue = 0;
 int pen_width = 0;
 
 //Basic functions
+
 int get_between(int min, int max, int number) {
 	if(number > max) return max;
 	else if(number < min) return min; 
@@ -108,6 +126,7 @@ void set_color(pixel *pix, int red, int green, int blue) {
 }
 
 //pen functions
+//nastavuju farbu a sirku pera pri kreslení
 void pen_set_color(int red, int green, int blue) {
 	pen_red = red;
 	pen_green = green;
@@ -123,6 +142,7 @@ void pen_set(int red, int green, int blue, int width) {
 	pen_set_width(width);
 }
 
+//Premaluje celu plochu farbou pera
 void bucket_fill(pixel canvas[TEX_SIZE][TEX_SIZE]) {
 	int x, y;
 	for(x = 0; x < TEX_SIZE; x++) {
@@ -132,6 +152,7 @@ void bucket_fill(pixel canvas[TEX_SIZE][TEX_SIZE]) {
 	}
 }
 
+//Vykresli jeden bod na suradniciach x, y farbou pera o velkosti pera
 void point(pixel canvas[TEX_SIZE][TEX_SIZE], int x, int y) {
 	int min_x, min_y, max_x, max_y, i_y;
 	min_x = get_between(0, TEX_SIZE, floor(x-(pen_width/2)));
@@ -146,10 +167,12 @@ void point(pixel canvas[TEX_SIZE][TEX_SIZE], int x, int y) {
 	}
 }
 
+//To co predtim, akurat pracuje zo strukturov pt - point - bod
 void dw_pt(pt* pt) {
 	point(image, pt->x, pt->y);
 }
 
+//Vytvory popis ciary (ln_desc)
 ln_desc ln_describe(ln *ln) {
 	ln_desc dc;
 	dc.len_x = abs(ln->pt1.x - ln->pt2.x);
@@ -162,6 +185,7 @@ ln_desc ln_describe(ln *ln) {
 	return dc;
 }
 
+//Z dvoch bodov vytvori ciaru (funkcia len na setrenie miesta)
 ln new_ln(pt pt1, pt pt2) {
 	ln line;
 	line.pt1 = pt1;
@@ -169,6 +193,10 @@ ln new_ln(pt pt1, pt pt2) {
 	return line;
 }
 
+//ln_gpt - line_get_point vrati num-ty bod ciary
+//ide po suradnici na ktorej je ciara dlhsia (max(len_x, len_y))
+//ak je prvy bod dlhzsej len minimalny danej len tak num pripocitava
+//inak num odpocitava od max danej len
 pt ln_gpt(ln *ln, ln_desc *dc, int num) {
 	pt result;
 	int desc;
@@ -184,54 +212,29 @@ pt ln_gpt(ln *ln, ln_desc *dc, int num) {
 	return result;
 }
 
-void ln_dw_sub(ln* ln, int start, int end) {
-	int i;
-	ln_desc dc = ln_describe(ln);
-	pt pt;
-	for(i=start; i<dc.len; i++) {
-		pt = ln_gpt(ln, &dc, i);
-		dw_pt(&pt);
-	}
-}
-
+//Vykresli ciaru ln_dw - line_draw
 void ln_dw(ln* ln) {
 	int i;
-	ln_desc dc = ln_describe(ln);
+	ln_desc dc = ln_describe(ln); //ziska popis
 	pt pt;
-	for(i=0; i<dc.len; i++) {
-		pt = ln_gpt(ln, &dc, i);
-		dw_pt(&pt);
+	for(i=0; i<dc.len; i++) { //cikly cez dlhsiu suradnicu
+		pt = ln_gpt(ln, &dc, i); //ziskaj bod
+		dw_pt(&pt); //vykresli
 	}
 }
 
-pt new_pt(int x, int y, int w) {
-	pt pt;
-	pt.x = x;
-	pt.y = y;
-	pt.w = w;
-	return pt;
-}
-
-void set_pt(pt *pt, int x, int y) {
-	pt->x = x;
-	pt->y = y;
-}
-
-bz new_bz(pt* pt1, pt* pt2, pt* pt3) {
-	bz bz;
-	bz.pt1 = *pt1;
-	bz.pt2 = *pt2;
-	bz.pt3 = *pt3;
-	return bz;
-}
-
+//Ziskaj popis bezierovej krivky
 bz_desc bz_get_desc(bz *bz) {
 	bz_desc desc;
-	desc.ln1 = (ln*)bz;
+	//struktura bezierovej krivky su tri body a krivka dve
+	//takze aby som ziskal dve ciary z bezierovej krivky
+	//staci pretipovat odkazi na konkretne body
+	desc.ln1 = (ln*)bz; //toto je v podstate odkaz na prvy bod bz
 	desc.ln = (ln*)&bz->pt2;
-	desc.ldc1 = ln_describe(desc.ln1);
+	desc.ldc1 = ln_describe(desc.ln1); //ziska popisis ciar
 	desc.ldc2 = ln_describe(desc.ln);
 
+	//vypocet dlzky krokov a pocet krokov potrebny na nakreslenie bz
 	if(desc.ldc1.len > desc.ldc2.len) {
 		desc.step_1 = BZ_STEP;
 		desc.len = desc.ldc1.len/BZ_STEP;
@@ -245,6 +248,7 @@ bz_desc bz_get_desc(bz *bz) {
 	return desc;
 }
 
+//vykresli bezierovu krivku bz_dw - bezier_draw
 void bz_dw(bz *bz) {
 	bz_desc desc = bz_get_desc(bz);
 	int i;
@@ -252,17 +256,26 @@ void bz_dw(bz *bz) {
 	pt actual;
 
 	for(i=0; i<=desc.len;i++) {
+		//ziska prvy bod z obydvoch ciar bz a vytvory ciaru medzi nimy
 		ln line_md;
 		line_md.pt1 = ln_gpt(desc.ln1, &desc.ldc1, i*desc.step_1);
 		line_md.pt2 = ln_gpt(desc.ln, &desc.ldc2, i*desc.step_2);
+
 		ln_desc dc_md = ln_describe(&line_md);
+
+		//Ziska bod stredovej pomerne
 		actual = ln_gpt(&line_md, &dc_md, ((float)i/desc.len)*dc_md.len);
+
+		//spoji predchadzajuci kresleny bod z novym a vykresli
 		ln ln3 = new_ln(prew, actual);	
 		ln_dw(&ln3);
+
+		//aktualny zisteni bod sa stava predchadzajucim
 		prew = actual;
 	}
 }
 
+//m_mul - nasobenie matic
 void m_mul(float matrix_a[4][4], float matrix_b[4][4], float result[4][4]) {
 	int row_a, coll_b, element;
 
@@ -277,6 +290,8 @@ void m_mul(float matrix_a[4][4], float matrix_b[4][4], float result[4][4]) {
 				
 }
 
+//Tu mam zadefinovane pismeno r do struktury typu obj, ratam ze na zaciatku bude nalepene na obrazovke (z - 512)
+//moj 3d priestor je 512x512x512
 obj r = {
 	4,
 	{
@@ -287,8 +302,10 @@ obj r = {
 	}
 };
 
+//hnusny hack pretože projekcia mi vždy prepisala data, tak isto zdroj tej nestability
 obj *out_r;
 
+//prenasoby bod maticou a vrati vysledok ako novy bod
 pt mrx_pt(pt *point, float matrix[4][4]) {
 	pt result;
 	result.x = 
@@ -302,6 +319,7 @@ pt mrx_pt(pt *point, float matrix[4][4]) {
 	return result;
 }
 
+//Vykresli cely objekt, v podstate po jednom vykresli jeho bezierove krivky
 void obj_dw(obj *object) {
 	int len = object->len;
 	while(len-- > 0) {
@@ -309,6 +327,7 @@ void obj_dw(obj *object) {
 	}
 }
 
+//Vytvory kopiu objektu a vrati odkaz na nu
 obj* obj_copy(obj *object) {
 	obj *res = malloc(sizeof(obj)+object->len*sizeof(bz));
 	res->len = object->len;
@@ -316,6 +335,7 @@ obj* obj_copy(obj *object) {
 	return res;
 }
 
+//translate - prenasovy kazdy bod objektu translacnou maticou
 void obj_trans(obj *object, int vx, int vy, int vz) {
 	int len = object->len;
 	float matrix[4][4] = {
@@ -332,6 +352,7 @@ void obj_trans(obj *object, int vx, int vy, int vz) {
 	}
 }
 
+//Rotacia podla osy z --//-- rotacnou maticou (rotacia podla bodu 0,0,0)
 void obj_rot_z(obj *object, float angle) {
 	int len = object->len;
 	float matrix[4][4] = {
@@ -348,6 +369,7 @@ void obj_rot_z(obj *object, float angle) {
 	}
 }
 
+//Rotacia podla osy x --//-- rotacnou maticou (rotacia podla bodu 0,0,0)
 void obj_rot_x(obj *object, float angle) {
 	int len = object->len;
 	float matrix[4][4] = {
@@ -364,6 +386,7 @@ void obj_rot_x(obj *object, float angle) {
 	}
 }
 
+//Rotacia podla osy y --//-- rotacnou maticou (rotacia podla bodu 0,0,0)
 void obj_rot_y(obj *object, float angle) {
 	int len = object->len;
 	float matrix[4][4] = {
@@ -391,6 +414,10 @@ void bz_divw(bz *bz) {
 	}
 }
 
+//perspektivna matica
+//toto on chcel aby sme robili tak ako su robene funkcie obj_trot_*
+//teda ze vynasobim vsetky transformacne matice co chcem pouzit a nakoniec
+//vsetky body vyslednou maticou, mne to ale nejak neslo
 void obj_persp(obj *object, float d) {
 	int len = object->len;
 	float matrix[4][4] = {
@@ -408,6 +435,12 @@ void obj_persp(obj *object, float d) {
 	}
 }
 
+//Rotacia podla lubovolneho bodu
+//posuniem bod podla ktoreho chcem rotovat do 0, 0, 0
+//zrotujem a posuniem naspet
+//robi sa to tak ze vynasobim navzajom matice danych transformaci
+//a vyslednou prenasobim body objektu
+//TOU MATICOU KTOROU PRENASOBUJEM AKO POSLEDNOU, TA SA VKONA AKO PRVA
 void obj_trot_z(obj *object, float angle, int vx, int vy, int vz) {
 	int len = object->len;
 	float trans1[4][4] = {
@@ -501,6 +534,7 @@ void obj_trot_x(obj *object, float angle, int vx, int vy, int vz) {
 	}
 }
 
+//Rotacia na vsetkych bodoch
 void obj_trot_xyz(obj *object, float angle, int vx, int vy, int vz) {
 	int len = object->len;
 	float trans1[4][4] = {
@@ -546,12 +580,17 @@ void obj_trot_xyz(obj *object, float angle, int vx, int vy, int vz) {
 	}
 }
 
+//Jednoducha animacia, rotacia okolo vsetkych bodov
 void animate() {
 	obj_trans(&r, -200, -200, -512);
 	obj_rot_z(&r, 0.2);
 	obj_rot_y(&r, 0.2);
 	obj_trans(&r, 200, 200, 512);
 	free(out_r);
+	//Perspektivu robi na kopii objektu, pretoze po
+	//prenasobeni perspektivnou maticou sa objekt neda pouzit,
+	//nastavy z na rovnake hodnoty vo vsetkych bodoch
+	//takze neviem potom ako bol objekt zrotovany
 	out_r = obj_copy(&r);
 }
 
